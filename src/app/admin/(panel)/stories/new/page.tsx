@@ -6,6 +6,6 @@ export const dynamic = "force-dynamic";
 
 export default async function NewStoryPage() {
   init();
-  const categories = listCategories();
+  const categories = await listCategories();
   return <StoryEditor story={null} categories={categories.map((c) => ({ id: c.id, name: c.name }))} />;
 }

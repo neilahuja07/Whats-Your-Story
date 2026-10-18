@@ -28,18 +28,17 @@ const SORTS = [
 ] as const;
 
 /**
- * Varied card proportions on a 3-column rhythm. Cycle length 6 keeps the
- * pattern regular enough to feel intentional rather than random, while
- * breaking up the "identical tiles" look.
+ * Every story image frame on this page uses ONE proportion: 4:5 portrait.
+ *
+ * Both the "Editor's pick" strip and the main archive grid pass this single
+ * constant, so all cards in a row share identical image heights, grid rows
+ * stay flush, and `Portrait`'s object-cover/object-top crop only ever trims a
+ * few percent off the bottom of a portrait-orientation photo (faces sit in
+ * the upper half of the frame). Alternating ratios (4:5 vs square vs 16:10)
+ * previously produced ragged rows and, in the 16:10 strip frame, cut portrait
+ * photos down to the top ~half of the image.
  */
-const GRID_ASPECTS = [
-  "aspect-[4/5]",
-  "aspect-square",
-  "aspect-[4/5]",
-  "aspect-square",
-  "aspect-[4/5]",
-  "aspect-square",
-];
+const STORY_ASPECT = "aspect-[4/5]";
 
 export default async function StoriesPage({
   searchParams,
@@ -230,9 +229,12 @@ export default async function StoriesPage({
                   key={story.id}
                   story={story}
                   showDate
-                  aspect="aspect-[16/10]"
+                  aspect={STORY_ASPECT}
                   revealIndex={i}
                   excerptLines={2}
+                  // Two-column strip: each card is ~46vw on desktop, not the
+                  // 33vw of the archive grid, so request the larger variant.
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 640px"
                 />
               ))}
             </div>
@@ -263,7 +265,7 @@ export default async function StoriesPage({
                     showDate
                     priority={i < 3}
                     revealIndex={i % 3}
-                    aspect={GRID_ASPECTS[i % GRID_ASPECTS.length]}
+                    aspect={STORY_ASPECT}
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                   />
                 ))}

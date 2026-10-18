@@ -11,9 +11,9 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
   init();
-  const body = getSiteContentValue("privacy.page_body");
+  const body = await getSiteContentValue("privacy.page_body");
   const isDraft = body.startsWith("DRAFT");
 
   return (

@@ -97,10 +97,10 @@ export async function POST(req: NextRequest) {
   const slug = await ensureUniqueSlug(desiredSlug);
   // The editor sends categoryId; categoryName is accepted as a fallback.
   const categoryId =
-    rawCategoryId && getCategoryById(rawCategoryId)
+    rawCategoryId && (await getCategoryById(rawCategoryId))
       ? rawCategoryId
       : categoryName
-        ? ensureCategoryByName(categoryName)
+        ? await ensureCategoryByName(categoryName)
         : null;
 
   let story;
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  logActivity(admin.id, "story.created", "story", story.id);
+  await logActivity(admin, "story.created", "story", story.id);
 
   return NextResponse.json({ ok: true, story }, { status: 201 });
 }

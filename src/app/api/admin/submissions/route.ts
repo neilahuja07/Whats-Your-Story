@@ -52,6 +52,6 @@ export async function POST() {
   init();
   const admin = await getCurrentAdmin();
   if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  logActivity(admin.id, "submissions.listed", "submission", null);
+  await logActivity(admin, "submissions.listed", "submission", null);
   return NextResponse.json({ ok: true });
 }

@@ -10,7 +10,7 @@ export async function GET() {
   init();
   const admin = await getCurrentAdmin();
   if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  return NextResponse.json({ founder: getFounderProfile() });
+  return NextResponse.json({ founder: await getFounderProfile() });
 }
 
 /** PATCH — update the founder profile. */
@@ -26,13 +26,13 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const existing = getFounderProfile();
+  const existing = await getFounderProfile();
   const portraitUrl =
     typeof body.portraitUrl === "string"
       ? safeImageUrl(body.portraitUrl)
       : existing.portraitUrl;
 
-  const founder = updateFounderProfile({
+  const founder = await updateFounderProfile({
     name: sanitizePlainText(body.name, 120),
     role: sanitizePlainText(body.role, 120),
     biography: sanitizeRichText(typeof body.biography === "string" ? body.biography : ""),
@@ -43,6 +43,6 @@ export async function PATCH(req: NextRequest) {
     isDraft: isTrueFlag(body.isDraft),
   });
 
-  logActivity(admin.id, "founder.updated", "founder", "1");
+  await logActivity(admin, "founder.updated", "founder", "1");
   return NextResponse.json({ ok: true, founder });
 }

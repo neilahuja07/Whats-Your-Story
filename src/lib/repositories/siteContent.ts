@@ -1,10 +1,17 @@
-import { getDb } from "@/lib/db";
-import { nowIso } from "@/lib/utils";
+import { createSupabasePublicClient, createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
- * Key/value store for editable public-page content.
- * Keys are listed in SITE_CONTENT_KEYS with their defaults.
+ * Key/value store for editable public-page content (Supabase table
+ * `site_content`).
+ *
+ * Reads use the ANON client, so Row Level Security's public-read policy
+ * guarantees only this table's own content is visible. Writes use the
+ * signed-in administrator's session and require the admin allowlist.
+ *
+ * Any missing key (fresh database, Supabase not configured yet) falls back to
+ * the built-in defaults below, so the public pages always render.
  */
+
 export const SITE_CONTENT_KEYS = {
   homeHeadline: "home.headline",
   homeSupportingText: "home.supporting_text",
@@ -54,41 +61,96 @@ export const SITE_CONTENT_DEFAULTS: Record<SiteContentKey, string> = {
     "I confirm that I have the right to submit this story and its contents, and I agree that What's Your Story may review my submission and contact me about it. I understand that submitting a story does not automatically publish it or grant permission for public publication.",
 };
 
+let warnedAboutConfig = false;
+
+function warnNotConfigured(): void {
+  if (warnedAboutConfig) return;
+  warnedAboutConfig = true;
+  console.warn(
+    "[site-content] NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are not set — " +
+      "using built-in default content. See SUPABASE_SETUP.md.",
+  );
+}
+
+/** Anonymous client for public reads, or `null` when Supabase is not set up. */
+function publicClient() {
+  try {
+    return createSupabasePublicClient();
+  } catch {
+    warnNotConfigured();
+    return null;
+  }
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type Row = Record<string, any>;
+
 /** Read all site content as a plain object (missing keys fall back to defaults). */
-export function getSiteContent(): Partial<Record<SiteContentKey, string>> {
-  const db = getDb();
-  const rows = db.prepare("SELECT key, content FROM site_content").all() as unknown as {
-    key: string;
-    content: string;
-  }[];
+export async function getSiteContent(): Promise<
+  Partial<Record<SiteContentKey, string>>
+> {
   const out: Record<string, string> = { ...SITE_CONTENT_DEFAULTS };
-  for (const r of rows) {
-    if (r.key in SITE_CONTENT_DEFAULTS) {
-      out[r.key] = r.content;
+  const supabase = publicClient();
+  if (!supabase) return out as Partial<Record<SiteContentKey, string>>;
+
+  const { data, error } = await supabase
+    .from("site_content")
+    .select("key, content");
+  if (error) {
+    // A missing table (migration SQL not run yet) degrades to defaults.
+    console.error("[site-content] read failed:", error.message);
+    return out as Partial<Record<SiteContentKey, string>>;
+  }
+  for (const row of (data ?? []) as Row[]) {
+    if (row.key in SITE_CONTENT_DEFAULTS) {
+      out[row.key] = String(row.content ?? "");
     }
   }
   return out as Partial<Record<SiteContentKey, string>>;
 }
 
-export function getSiteContentValue(key: SiteContentKey): string {
-  const db = getDb();
-  const row = db
-    .prepare("SELECT content FROM site_content WHERE key = ?")
-    .get(key) as { content: string } | undefined;
-  if (row && row.content !== "") return row.content;
+export async function getSiteContentValue(key: SiteContentKey): Promise<string> {
+  const supabase = publicClient();
+  if (!supabase) return SITE_CONTENT_DEFAULTS[key];
+
+  const { data, error } = await supabase
+    .from("site_content")
+    .select("content")
+    .eq("key", key)
+    .maybeSingle();
+  if (error) {
+    console.error("[site-content] read failed:", error.message);
+    return SITE_CONTENT_DEFAULTS[key];
+  }
+  const content = (data as Row | null)?.content;
+  if (content) return String(content);
   return SITE_CONTENT_DEFAULTS[key];
 }
 
-export function setSiteContent(entries: Record<string, string>): void {
-  const db = getDb();
-  const stmt = db.prepare(
-    `INSERT INTO site_content (key, content, updated_at) VALUES (?, ?, ?)
-     ON CONFLICT(key) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
-  );
-  const ts = nowIso();
-  for (const [key, content] of Object.entries(entries)) {
-    if (key in SITE_CONTENT_DEFAULTS) {
-      stmt.run(key, content, ts);
-    }
+/**
+ * Upsert a subset of site-content keys (admin save). Unknown keys are
+ * ignored, exactly as before. `updated_at` is maintained by a database
+ * trigger.
+ */
+export async function setSiteContent(
+  entries: Record<string, string>,
+): Promise<void> {
+  const rows = Object.entries(entries)
+    .filter(([key]) => key in SITE_CONTENT_DEFAULTS)
+    .map(([key, content]) => ({ key, content }));
+  if (rows.length === 0) return;
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("site_content")
+    .upsert(rows, { onConflict: "key" });
+  if (error) {
+    throw new Error(
+      /could not find the table|does not exist|schema cache/i.test(error.message)
+        ? "The site_content table is missing in Supabase. Run supabase_migration_persistence.sql in the SQL Editor, then try again."
+        : /permission denied|row-level security|violates row-level/i.test(error.message)
+          ? "Supabase refused the change (Row Level Security). Confirm your account is listed in the admin_users table."
+          : `Could not save the site content: ${error.message}`,
+    );
   }
 }

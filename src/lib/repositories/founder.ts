@@ -1,48 +1,64 @@
-import { getDb } from "@/lib/db";
 import { nowIso } from "@/lib/utils";
+import { createSupabasePublicClient, createSupabaseServerClient } from "@/lib/supabase/server";
 import type { FounderProfile } from "@/lib/types";
 
+/**
+ * Founder profile repository (Supabase table `founder_profile`, single row id 1).
+ *
+ * Reads use the ANON client (public pages); writes use the signed-in
+ * administrator's session and require the admin allowlist. When the row does
+ * not exist yet, reads return the same empty draft defaults the old local
+ * database produced on first access — no insert happens on read.
+ */
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
+type Row = Record<string, any>;
 
 const DEFAULTS = {
   name: "",
   role: "",
   biography: "",
   portrait_url: "",
-  portrait_verified: 0,
+  portrait_verified: false,
   vision: "",
   motivation: "",
-  is_draft: 1,
+  is_draft: true,
+  updated_at: "",
 };
 
-export function getFounderProfile(): FounderProfile {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM founder_profile WHERE id = 1").get() as
-    | any
-    | undefined;
-
-  if (!row) {
-    // Create the editable draft row on first access.
-    db.prepare(
-      `INSERT INTO founder_profile
-        (id, name, role, biography, portrait_url, portrait_verified, vision, motivation, is_draft, updated_at)
-       VALUES (1, '', '', '', '', 0, '', '', 1, ?)`,
-    ).run(nowIso());
-    return getFounderProfile();
-  }
-
+function mapFounder(row: Row | null): FounderProfile {
+  const r = { ...DEFAULTS, ...(row ?? {}) };
   return {
     id: 1,
-    name: row.name ?? DEFAULTS.name,
-    role: row.role ?? DEFAULTS.role,
-    biography: row.biography ?? DEFAULTS.biography,
-    portraitUrl: row.portrait_url ?? DEFAULTS.portrait_url,
-    portraitVerified: row.portrait_verified === 1,
-    vision: row.vision ?? DEFAULTS.vision,
-    motivation: row.motivation ?? DEFAULTS.motivation,
-    isDraft: row.is_draft === 1,
-    updatedAt: row.updated_at,
+    name: r.name ?? "",
+    role: r.role ?? "",
+    biography: r.biography ?? "",
+    portraitUrl: r.portrait_url ?? "",
+    portraitVerified: Boolean(r.portrait_verified),
+    vision: r.vision ?? "",
+    motivation: r.motivation ?? "",
+    isDraft: Boolean(r.is_draft),
+    updatedAt: r.updated_at ?? "",
   };
+}
+
+export async function getFounderProfile(): Promise<FounderProfile> {
+  try {
+    const supabase = createSupabasePublicClient();
+    const { data, error } = await supabase
+      .from("founder_profile")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error) {
+      console.error("[founder] read failed:", error.message);
+      return mapFounder(null);
+    }
+    return mapFounder((data as Row) ?? null);
+  } catch {
+    // Supabase not configured yet — present the empty draft.
+    return mapFounder(null);
+  }
 }
 
 export interface FounderInput {
@@ -56,23 +72,33 @@ export interface FounderInput {
   isDraft: boolean;
 }
 
-export function updateFounderProfile(input: FounderInput): FounderProfile {
-  const db = getDb();
-  db.prepare(
-    `UPDATE founder_profile SET
-      name = ?, role = ?, biography = ?, portrait_url = ?, portrait_verified = ?,
-      vision = ?, motivation = ?, is_draft = ?, updated_at = ?
-     WHERE id = 1`,
-  ).run(
-    input.name.trim(),
-    input.role.trim(),
-    input.biography,
-    input.portraitUrl.trim(),
-    input.portraitVerified ? 1 : 0,
-    input.vision,
-    input.motivation,
-    input.isDraft ? 1 : 0,
-    nowIso(),
-  );
+export async function updateFounderProfile(
+  input: FounderInput,
+): Promise<FounderProfile> {
+  const supabase = await createSupabaseServerClient();
+  const row = {
+    id: 1,
+    name: input.name.trim(),
+    role: input.role.trim(),
+    biography: input.biography,
+    portrait_url: input.portraitUrl.trim(),
+    portrait_verified: input.portraitVerified,
+    vision: input.vision,
+    motivation: input.motivation,
+    is_draft: input.isDraft,
+    updated_at: nowIso(),
+  };
+  const { error } = await supabase
+    .from("founder_profile")
+    .upsert(row, { onConflict: "id" });
+  if (error) {
+    throw new Error(
+      /could not find the table|does not exist|schema cache/i.test(error.message)
+        ? "The founder_profile table is missing in Supabase. Run supabase_migration_persistence.sql in the SQL Editor, then try again."
+        : /permission denied|row-level security|violates row-level/i.test(error.message)
+          ? "Supabase refused the change (Row Level Security). Confirm your account is listed in the admin_users table."
+          : `Could not save the founder profile: ${error.message}`,
+    );
+  }
   return getFounderProfile();
 }

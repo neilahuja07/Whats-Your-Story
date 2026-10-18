@@ -13,7 +13,7 @@ export default async function EditStoryPage({
   init();
   const { id } = await params;
   const story = await getStoryById(id);
-  const categories = listCategories();
+  const categories = await listCategories();
 
   if (!story) {
     return (

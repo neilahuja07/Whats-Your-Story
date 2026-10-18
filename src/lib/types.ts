@@ -119,9 +119,10 @@ export interface ActivityLogEntry {
 
 /**
  * A photograph that was manually imported (via the admin panel or the
- * `import-portrait` CLI). Photographs are stored under
- * public/images/portraits/imported/ with a descriptive, person-based
- * filename and are only rendered once verified.
+ * `import-portrait` CLI). Photographs are stored in the public Supabase
+ * Storage bucket `story-images` under a descriptive, person-based object
+ * name (e.g. stories/<storyId>/amara-okafor.jpg) and are only rendered
+ * once verified.
  */
 export interface PortraitImport {
   id: string;

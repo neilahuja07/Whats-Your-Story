@@ -30,7 +30,8 @@ import {
  *   DELETE /api/admin/collage  — delete a photograph (JSON { id })
  *
  * Files go to the existing public Supabase Storage bucket `story-images`
- * under `collage/`; metadata lives in the local `collage_portraits` table.
+ * under `collage/`; metadata lives in the `collage_portraits` table
+ * (supabase_migration_persistence.sql).
  * Uploads are validated by magic bytes (JPEG/PNG/WebP) and size. At most
  * COLLAGE_MAX (30) portraits can be ENABLED for the homepage at once.
  */
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
 
   /* ------------------------- replace one file ------------------------- */
   if (replaceId) {
-    const existing = getCollagePortrait(replaceId);
+    const existing = await getCollagePortrait(replaceId);
     if (!existing) {
       return NextResponse.json({ error: "Portrait not found." }, { status: 404 });
     }
@@ -138,7 +139,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const up = await uploadToStorage(files[0]);
-      const updated = replaceCollagePortrait(replaceId, {
+      const updated = await replaceCollagePortrait(replaceId, {
         storagePath: up.storagePath,
         url: up.url,
         verified: confirmed,
@@ -151,11 +152,11 @@ export async function POST(req: NextRequest) {
       }
       // The new file is stored; only then drop the old object.
       await removeFromStorage(existing.storagePath);
-      logActivity(admin.id, "collage.updated", "collage", replaceId);
+      await logActivity(admin, "collage.updated", "collage", replaceId);
       return NextResponse.json({
         ok: true,
         portrait: updated,
-        portraits: listCollagePortraits(),
+        portraits: await listCollagePortraits(),
       });
     } catch (err) {
       if (err instanceof UploadError) {
@@ -189,7 +190,7 @@ export async function POST(req: NextRequest) {
   for (const file of files) {
     try {
       const up = await uploadToStorage(file);
-      const { clamped } = addCollagePortrait({
+      const { clamped } = await addCollagePortrait({
         storagePath: up.storagePath,
         url: up.url,
         originalName: file.name,
@@ -224,11 +225,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  logActivity(admin.id, "collage.uploaded", "collage", null);
+  await logActivity(admin, "collage.uploaded", "collage", null);
 
   return NextResponse.json({
     ok: true,
-    portraits: listCollagePortraits(),
+    portraits: await listCollagePortraits(),
     warnings,
   });
 }
@@ -254,32 +255,32 @@ export async function PATCH(req: NextRequest) {
   switch (action) {
     case "enable":
     case "disable": {
-      const res = setCollagePortraitEnabled(id, action === "enable");
+      const res = await setCollagePortraitEnabled(id, action === "enable");
       if (!res.ok) {
         return NextResponse.json({ error: res.error }, { status: 409 });
       }
       break;
     }
     case "verify":
-      if (!setCollagePortraitVerified(id, true)) {
+      if (!(await setCollagePortraitVerified(id, true))) {
         return NextResponse.json({ error: "Portrait not found." }, { status: 404 });
       }
       break;
     case "unverify":
-      if (!setCollagePortraitVerified(id, false)) {
+      if (!(await setCollagePortraitVerified(id, false))) {
         return NextResponse.json({ error: "Portrait not found." }, { status: 404 });
       }
       break;
     case "moveUp":
     case "moveDown":
-      moveCollagePortrait(id, action === "moveUp" ? "up" : "down");
+      await moveCollagePortrait(id, action === "moveUp" ? "up" : "down");
       break;
     default:
       return NextResponse.json({ error: "Unknown action." }, { status: 422 });
   }
 
-  logActivity(admin.id, "collage.updated", "collage", id);
-  return NextResponse.json({ ok: true, portraits: listCollagePortraits() });
+  await logActivity(admin, "collage.updated", "collage", id);
+  return NextResponse.json({ ok: true, portraits: await listCollagePortraits() });
 }
 
 export async function DELETE(req: NextRequest) {
@@ -299,15 +300,15 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Portrait id is required." }, { status: 422 });
   }
 
-  const existing = getCollagePortrait(id);
+  const existing = await getCollagePortrait(id);
   if (!existing) {
     return NextResponse.json({ error: "Portrait not found." }, { status: 404 });
   }
 
-  deleteCollagePortrait(id);
+  await deleteCollagePortrait(id);
   // The record is gone; removing the file is best-effort.
   await removeFromStorage(existing.storagePath);
-  logActivity(admin.id, "collage.deleted", "collage", id);
+  await logActivity(admin, "collage.deleted", "collage", id);
 
-  return NextResponse.json({ ok: true, portraits: listCollagePortraits() });
+  return NextResponse.json({ ok: true, portraits: await listCollagePortraits() });
 }

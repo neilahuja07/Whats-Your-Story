@@ -10,11 +10,12 @@ Until a photograph is imported **and** verified, the site renders a neutral
 placeholder (the person's initials on a plain background) — never another
 person's photo and never an AI-generated substitute.
 
-Imported portraits are stored in `public/images/portraits/imported/` under
-descriptive, person-based filenames (e.g. `amara-okafor.jpg`). Their provenance
-is recorded in the database (`portrait_imports` table), including the source
-note, whether the person match was confirmed, and whether publication permission
-was granted.
+Imported portraits are stored in the public Supabase Storage bucket
+`story-images` under descriptive, person-based object names (e.g.
+`stories/<storyId>/amara-okafor.jpg`, `founder/...` for the founder
+photograph). Their provenance is recorded in the database
+(`portrait_imports` table), including the source note, whether the person
+match was confirmed, and whether publication permission was granted.
 
 See the project `README.md` ("Importing real photographs") for the manual
 import workflow, and `npm run import-portrait --help` for the command-line tool.

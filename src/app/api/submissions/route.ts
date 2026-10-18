@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
 import { init } from "@/lib/bootstrap";
 import { createSubmission } from "@/lib/repositories/submissions";
 import { sanitizeMultilineText, sanitizePlainText } from "@/lib/sanitize";
@@ -10,6 +9,7 @@ import {
   isValidPhone,
   nowIso,
 } from "@/lib/utils";
+import { createSupabasePublicClient } from "@/lib/supabase/server";
 import {
   notifyAdminOfSubmission,
   recentlyNotified,
@@ -23,7 +23,9 @@ import type { ConsentRecord } from "@/lib/types";
  * The public form collects exactly six required fields plus two mandatory
  * permission confirmations. Security:
  *  - server-side validation of every field (client checks are UX only)
- *  - per-IP rate limiting (fixed window, stored in SQLite)
+ *  - per-IP rate limiting (fixed hourly window, counted in Supabase via the
+ *    SECURITY DEFINER RPC bump_rate_limit — the rate_limits table has no
+ *    direct API access at all)
  *  - request-size cap before parsing
  *  - consent text + timestamp recorded with the submission
  *  - no mass assignment: only whitelisted fields are read from the body
@@ -32,7 +34,7 @@ import type { ConsentRecord } from "@/lib/types";
  * Notification:
  *  - after the row is safely stored, an e-mail notification is sent to the
  *    administrator via Resend (best effort — an e-mail failure never fails
- *    the submission and is recorded locally for retry from the admin panel)
+ *    the submission and is recorded for retry from the admin panel)
  *  - identical repeated submissions inside a short window do not send a
  *    second notification
  */
@@ -55,31 +57,37 @@ function clientIp(req: NextRequest): string {
   return req.headers.get("x-real-ip") || "unknown";
 }
 
-function checkRateLimit(bucket: string): boolean {
-  const db = getDb();
-  const windowStart = new Date(
-    Math.floor(Date.now() / 3_600_000) * 3_600_000,
-  ).toISOString();
-  const row = db
-    .prepare(
-      "SELECT count FROM rate_limits WHERE bucket = ? AND window_start = ?",
-    )
-    .get(bucket, windowStart) as { count: number } | undefined;
-
-  if (row && row.count >= RATE_LIMIT_PER_HOUR) return false;
-
-  db.prepare(
-    `INSERT INTO rate_limits (bucket, window_start, count) VALUES (?, ?, 1)
-     ON CONFLICT(bucket, window_start) DO UPDATE SET count = count + 1`,
-  ).run(bucket, windowStart);
-  return true;
+/**
+ * Consume one attempt from the IP's hourly bucket and report whether the
+ * request may proceed. Counted atomically by the bump_rate_limit RPC.
+ * Fails OPEN (allows) when Supabase is unreachable, so a database blip can
+ * never take the public submission form offline.
+ */
+async function checkRateLimit(bucket: string): Promise<boolean> {
+  try {
+    const supabase = createSupabasePublicClient();
+    const windowStart = new Date(
+      Math.floor(Date.now() / 3_600_000) * 3_600_000,
+    ).toISOString();
+    const { data, error } = await supabase.rpc("bump_rate_limit", {
+      p_bucket: bucket,
+      p_window_start: windowStart,
+    });
+    if (error) {
+      console.warn("[submissions] rate limit check failed (failing open):", error.message);
+      return true;
+    }
+    return Number(data ?? 1) <= RATE_LIMIT_PER_HOUR;
+  } catch {
+    return true;
+  }
 }
 
 export async function POST(req: NextRequest) {
   init();
 
   const ip = clientIp(req);
-  if (!checkRateLimit(`submit:${ip}`)) {
+  if (!(await checkRateLimit(`submit:${ip}`))) {
     return NextResponse.json(
       {
         error:
@@ -203,7 +211,7 @@ export async function POST(req: NextRequest) {
     // so any error is swallowed here and recorded server-side for retry.
     const fingerprint = submissionFingerprint(email, storyTitle, introduction);
     try {
-      if (recentlyNotified(fingerprint)) {
+      if (await recentlyNotified(fingerprint)) {
         // Same story submitted again moments ago (double submit / retry):
         // the submission is stored, but no second notification is sent.
         console.info(

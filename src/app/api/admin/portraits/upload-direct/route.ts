@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { init } from "@/lib/bootstrap";
 import { getCurrentAdmin, logActivity } from "@/lib/auth";
-import { savePortraitImage, UploadError } from "@/lib/uploads";
+import { saveFounderPortraitToStorage, UploadError } from "@/lib/uploads";
 import { sanitizePlainText } from "@/lib/sanitize";
 import { recordPortraitImport } from "@/lib/repositories/portraitImports";
 
@@ -9,9 +9,11 @@ import { recordPortraitImport } from "@/lib/repositories/portraitImports";
  * POST /api/admin/portraits/upload-direct
  *
  * Same validation as the story upload, but stores the file WITHOUT
- * attaching it to a story (used for the founder portrait). The caller
- * then saves the returned URL through the founder API, where the
- * verification flag is set separately.
+ * attaching it to a story (used for the founder portrait). The bytes go to
+ * the public Supabase Storage bucket `story-images` under `founder/` —
+ * nothing is ever written to the local filesystem. The caller then saves
+ * the returned URL through the founder API, where the verification flag is
+ * set separately.
  */
 export async function POST(req: NextRequest) {
   init();
@@ -39,12 +41,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const saved = savePortraitImage(
+    const saved = await saveFounderPortraitToStorage(
       { buffer, declaredName: file.name, mimeType: file.type },
       personName,
     );
 
-    recordPortraitImport({
+    await recordPortraitImport({
       storyId: null,
       fileName: saved.fileName,
       originalName: file.name,
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
       importedBy: admin.email,
     });
 
-    logActivity(admin.id, "portrait.imported", "founder", null);
+    await logActivity(admin, "portrait.imported", "founder", null);
 
     return NextResponse.json({
       ok: true,

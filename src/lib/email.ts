@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { getDb } from "@/lib/db";
-import { nowIso, uid } from "@/lib/utils";
+import {
+  createSupabasePublicClient,
+  createSupabaseServerClient,
+} from "@/lib/supabase/server";
 import type { StorySubmission, SubmissionReviewStatus } from "@/lib/types";
 
 /**
@@ -13,14 +15,15 @@ import type { StorySubmission, SubmissionReviewStatus } from "@/lib/types";
  *   required.
  * - Delivery is best-effort: the submission is ALWAYS saved first; a failed
  *   e-mail never rolls anything back and never reaches the visitor.
- * - Every send is recorded in the local `submission_notifications` table so
- *   an administrator can retry a failed notification from the admin panel.
+ * - Every send is recorded in the Supabase `submission_notifications` table
+ *   (see supabase_migration_persistence.sql) so an administrator can retry a
+ *   failed notification from the admin panel.
  */
 
 const RESEND_API_URL = "https://api.resend.com/emails";
 const SUBJECT = "New Interest Entry — What's Your Story";
 const PREVIEW_CHARS = 600;
-/** Cap on stored error text so a pathological upstream response cannot bloat SQLite. */
+/** Cap on stored error text so a pathological upstream response cannot bloat the log. */
 const MAX_ERROR_CHARS = 1000;
 
 export interface EmailConfig {
@@ -259,7 +262,7 @@ export async function notifyAdminOfSubmission(
   const cfg = emailConfig();
   if (!cfg) {
     warnMissingConfig();
-    recordNotification(submission, "skipped", "Email is not configured.");
+    await recordNotification(submission, "skipped", "Email is not configured.");
     return { status: "skipped", error: "Email is not configured." };
   }
 
@@ -310,39 +313,40 @@ export async function notifyAdminOfSubmission(
     );
   }
 
-  recordNotification(submission, result.status, result.error);
+  await recordNotification(submission, result.status, result.error);
   return result;
 }
 
-/* ------------------------- local delivery log --------------------------- */
+/* ------------------------- delivery log (Supabase) ---------------------- */
 
-function recordNotification(
+/**
+ * Record (or update) the delivery outcome for a submission, via the
+ * SECURITY DEFINER RPC so it works for the ANON public-submission route too.
+ * Best-effort: a logging failure is warned about and never affects the caller.
+ */
+async function recordNotification(
   submission: StorySubmission,
   status: NotifyResult["status"],
   error: string | null,
-): void {
+): Promise<void> {
   try {
-    const db = getDb();
-    const ts = nowIso();
-    const safeError = (error ?? "").slice(0, MAX_ERROR_CHARS);
-    db.prepare(
-      `INSERT INTO submission_notifications
-         (id, submission_id, fingerprint, status, error, attempts, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-       ON CONFLICT(submission_id) DO UPDATE SET
-         status      = excluded.status,
-         error       = excluded.error,
-         attempts    = submission_notifications.attempts + 1,
-         updated_at  = excluded.updated_at`,
-    ).run(
-      uid(),
-      submission.id,
-      submissionFingerprint(submission.email, submission.storyTitle, submission.storyContent),
-      status,
-      safeError,
-      ts,
-      ts,
+    const supabase = createSupabasePublicClient();
+    const { error: rpcError } = await supabase.rpc(
+      "record_submission_notification",
+      {
+        p_submission_id: submission.id,
+        p_fingerprint: submissionFingerprint(
+          submission.email,
+          submission.storyTitle,
+          submission.storyContent,
+        ),
+        p_status: status,
+        p_error: (error ?? "").slice(0, MAX_ERROR_CHARS),
+      },
     );
+    if (rpcError) {
+      console.error("[email] Could not record notification outcome:", rpcError.message);
+    }
   } catch (err) {
     console.error("[email] Could not record notification outcome:", err);
   }
@@ -357,25 +361,41 @@ export interface NotificationLog {
 }
 
 /** The recorded delivery outcome for a submission (admin display / resend). */
-export function getNotificationLog(submissionId: string): NotificationLog {
-  const row = getDb()
-    .prepare(
-      "SELECT submission_id, status, error, attempts, updated_at FROM submission_notifications WHERE submission_id = ?",
-    )
-    .get(submissionId) as
-    | { submission_id: string; status: string; error: string; attempts: number; updated_at: string }
-    | undefined;
-
-  if (!row) {
+export async function getNotificationLog(
+  submissionId: string,
+): Promise<NotificationLog> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("submission_notifications")
+      .select("submission_id, status, error, attempts, updated_at")
+      .eq("submission_id", submissionId)
+      .maybeSingle();
+    if (error) {
+      console.warn("[email] notification log read failed:", error.message);
+      return { submissionId, status: null, error: "", attempts: 0, updatedAt: null };
+    }
+    const row = data as {
+      submission_id: string;
+      status: string;
+      error: string;
+      attempts: number;
+      updated_at: string;
+    } | null;
+    if (!row) {
+      return { submissionId, status: null, error: "", attempts: 0, updatedAt: null };
+    }
+    return {
+      submissionId: row.submission_id,
+      status: row.status as NotificationLog["status"],
+      error: row.error ?? "",
+      attempts: row.attempts,
+      updatedAt: row.updated_at,
+    };
+  } catch {
+    // Supabase not configured yet — report "never sent".
     return { submissionId, status: null, error: "", attempts: 0, updatedAt: null };
   }
-  return {
-    submissionId: row.submission_id,
-    status: row.status as NotificationLog["status"],
-    error: row.error ?? "",
-    attempts: row.attempts,
-    updatedAt: row.updated_at,
-  };
 }
 
 /* --------------------------- duplicate defence -------------------------- */
@@ -399,14 +419,24 @@ const DUPLICATE_WINDOW_MS = 10 * 60_000; // 10 minutes
 
 /**
  * True when an identical submission (same person + title + content) already
- * produced a notification within the duplicate window.
+ * produced a notification within the duplicate window. Checked through the
+ * SECURITY DEFINER RPC so the ANON public-submission route can use it too.
+ * Fails OPEN (returns false) so a logging problem never blocks delivery.
  */
-export function recentlyNotified(fingerprint: string): boolean {
-  const cutoff = new Date(Date.now() - DUPLICATE_WINDOW_MS).toISOString();
-  const row = getDb()
-    .prepare(
-      "SELECT 1 AS x FROM submission_notifications WHERE fingerprint = ? AND status = 'sent' AND updated_at >= ? LIMIT 1",
-    )
-    .get(fingerprint, cutoff);
-  return Boolean(row);
+export async function recentlyNotified(fingerprint: string): Promise<boolean> {
+  const since = new Date(Date.now() - DUPLICATE_WINDOW_MS).toISOString();
+  try {
+    const supabase = createSupabasePublicClient();
+    const { data, error } = await supabase.rpc("recent_notification_sent", {
+      p_fingerprint: fingerprint,
+      p_since: since,
+    });
+    if (error) {
+      console.warn("[email] duplicate check failed (failing open):", error.message);
+      return false;
+    }
+    return data === true;
+  } catch {
+    return false;
+  }
 }

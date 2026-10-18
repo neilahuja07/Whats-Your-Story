@@ -90,7 +90,7 @@ export async function PATCH(
               { status: 404 },
             );
           }
-          logActivity(admin.id, "story.published", "story", id);
+          await logActivity(admin, "story.published", "story", id);
           return NextResponse.json({ ok: true, status: "published" });
         case "unpublish":
           if (!(await setStoryStatus(id, "draft"))) {
@@ -99,7 +99,7 @@ export async function PATCH(
               { status: 404 },
             );
           }
-          logActivity(admin.id, "story.unpublished", "story", id);
+          await logActivity(admin, "story.unpublished", "story", id);
           return NextResponse.json({ ok: true, status: "draft" });
         case "archive":
           if (!(await setStoryStatus(id, "archived"))) {
@@ -108,7 +108,7 @@ export async function PATCH(
               { status: 404 },
             );
           }
-          logActivity(admin.id, "story.archived", "story", id);
+          await logActivity(admin, "story.archived", "story", id);
           return NextResponse.json({ ok: true, status: "archived" });
         case "feature":
           if (!(await setStoryFeatured(id, true))) {
@@ -117,7 +117,7 @@ export async function PATCH(
               { status: 404 },
             );
           }
-          logActivity(admin.id, "story.featured", "story", id);
+          await logActivity(admin, "story.featured", "story", id);
           return NextResponse.json({ ok: true, isFeatured: true });
         case "unfeature":
           if (!(await setStoryFeatured(id, false))) {
@@ -126,7 +126,7 @@ export async function PATCH(
               { status: 404 },
             );
           }
-          logActivity(admin.id, "story.unfeatured", "story", id);
+          await logActivity(admin, "story.unfeatured", "story", id);
           return NextResponse.json({ ok: true, isFeatured: false });
         default:
           return NextResponse.json({ error: "Unknown action." }, { status: 400 });
@@ -211,10 +211,10 @@ export async function PATCH(
       typeof body.categoryName === "string"
         ? sanitizePlainText(body.categoryName, 80)
         : "";
-    if (rawId && getCategoryById(rawId)) {
+    if (rawId && (await getCategoryById(rawId))) {
       patch.categoryId = rawId;
     } else {
-      patch.categoryId = categoryName ? ensureCategoryByName(categoryName) : null;
+      patch.categoryId = categoryName ? await ensureCategoryByName(categoryName) : null;
     }
   }
 
@@ -274,7 +274,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Story not found." }, { status: 404 });
   }
 
-  logActivity(admin.id, "story.updated", "story", id);
+  await logActivity(admin, "story.updated", "story", id);
 
   return NextResponse.json({ ok: true, story });
 }
@@ -305,6 +305,6 @@ export async function DELETE(
   }
   if (!deleted) return NextResponse.json({ error: "Story not found." }, { status: 404 });
 
-  logActivity(admin.id, "story.deleted", "story", id);
+  await logActivity(admin, "story.deleted", "story", id);
   return NextResponse.json({ ok: true });
 }

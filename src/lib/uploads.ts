@@ -1,34 +1,26 @@
-import fs from "node:fs";
-import path from "node:path";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { uid } from "@/lib/utils";
 
 /**
- * Image upload handling for portraits.
+ * Image upload handling for portraits — Supabase Storage only.
  *
- * Photographs are stored in public/images/portraits/imported/ using
- * DESCRIPTIVE, PERSON-BASED filenames (e.g. "amara-diallo.jpg") so that the
- * files remain understandable when browsing the folder directly.
+ * All photographs live in the public Supabase Storage bucket `story-images`
+ * (policies in supabase_setup.sql):
+ *   stories/<storyId>/<person-slug>.<ext>  — story cover photographs
+ *   collage/<uid>-<person-slug>.<ext>      — homepage hero collage
+ *   founder/<uid>-<person-slug>.<ext>      — the founder portrait
+ * Nothing is ever written to the local filesystem: Vercel's filesystem is
+ * read-only outside the build and not persistent application storage.
  *
  * Security:
  *  - Only real JPEG/PNG/WebP files are accepted (validated by magic bytes,
  *    not by the declared content type or extension).
  *  - File size is capped (MAX_UPLOAD_MB, default 5).
- *  - Filenames are sanitised; original names are kept only as metadata.
- *  - Files are written with a collision-safe name.
+ *  - Object names are sanitised; original names are kept only as metadata.
+ *  - A uid keeps every upload collision-free.
  */
 
-export const UPLOAD_SUBDIR = path.join("public", "images", "portraits", "imported");
-
-/**
- * The same folder as a WEB path (what a browser fetches).
- *
- * `UPLOAD_SUBDIR` is a filesystem path under `public/`, e.g.
- * "public/images/portraits/imported". Next.js serves everything inside
- * `public/` at the site root, so the corresponding URL is
- * "/images/portraits/imported". This MUST start with a leading slash — a
- * value like "public/images/..." is rejected by `next/image` and crashes any
- * public page that renders the portrait.
- */
-export const UPLOAD_WEB_DIR = "/images/portraits/imported";
+const STORAGE_BUCKET = "story-images";
 
 const MAX_BYTES = () =>
   Number(process.env.MAX_UPLOAD_MB || 5) * 1024 * 1024;
@@ -88,84 +80,60 @@ export function descriptiveFileName(personName: string, format: ImageFormat): st
   return `${slug || "portrait"}.${ext}`;
 }
 
-function uploadsRoot(): string {
-  return path.join(process.cwd(), UPLOAD_SUBDIR);
-}
-
-/**
- * Validate and store a portrait image.
- *
- * @param file      raw upload
- * @param personName used to build the descriptive filename
- * @returns the public URL path and stored file name
- * @throws UploadError with a user-safe message when validation fails
- */
-export function savePortraitImage(
-  file: UploadedImage,
-  personName: string,
-): { publicUrl: string; fileName: string; format: ImageFormat } {
-  if (!file.buffer?.length) {
-    throw new UploadError("The uploaded file is empty.");
-  }
-  if (file.buffer.length > MAX_BYTES()) {
+/** Shared byte validation used by every upload path. Validated bytes → format. */
+export function validateImageBytes(buffer: Buffer, originalName: string): ImageFormat {
+  if (!buffer?.length) throw new UploadError("The uploaded file is empty.");
+  if (buffer.length > MAX_BYTES()) {
     throw new UploadError(
       `The image is larger than the ${Math.round(MAX_BYTES() / 1024 / 1024)} MB limit.`,
     );
   }
-  const format = detectImageFormat(file.buffer);
+  const format = detectImageFormat(buffer);
   if (!format) {
     throw new UploadError(
-      "Only JPEG, PNG, or WebP photographs can be imported.",
+      `"${originalName}" is not a JPEG, PNG, or WebP photograph.`,
     );
   }
-
-  const base = descriptiveFileName(personName, format);
-  const root = uploadsRoot();
-  fs.mkdirSync(root, { recursive: true });
-
-  // Avoid overwriting a different person's photograph.
-  let fileName = base;
-  const stem = base.replace(/\.[^.]+$/, "");
-  let n = 2;
-  while (fs.existsSync(path.join(root, fileName))) {
-    fileName = `${stem}-${n}.${format === "jpeg" ? "jpg" : format}`;
-    n += 1;
-    if (n > 200) {
-      fileName = `${stem}-${Date.now()}.${format === "jpeg" ? "jpg" : format}`;
-      break;
-    }
-  }
-
-  fs.writeFileSync(path.join(root, fileName), file.buffer);
-  return {
-    publicUrl: `${UPLOAD_WEB_DIR}/${fileName}`,
-    fileName,
-    format,
-  };
+  return format;
 }
 
-/** Remove a previously imported image file (only within the import folder). */
-export function deletePortraitImage(fileName: string): boolean {
-  const safe = path.basename(fileName);
-  const full = path.join(uploadsRoot(), safe);
-  if (!full.startsWith(uploadsRoot())) return false;
-  if (!fs.existsSync(full)) return false;
-  fs.unlinkSync(full);
-  return true;
+/** Turn a Supabase Storage upload error into a message the admin can act on. */
+export function storageUploadError(err: { message: string }): UploadError {
+  return new UploadError(
+    /Bucket not found/i.test(err.message)
+      ? "The image storage bucket is missing. Run supabase_setup.sql (see SUPABASE_SETUP.md)."
+      : /row-level security|permission denied/i.test(err.message)
+        ? "Supabase refused the upload (Row Level Security). Confirm your account is listed in admin_users."
+        : `The photograph could not be uploaded: ${err.message}`,
+  );
 }
 
 /**
- * Check that an existing public image path still resolves on disk.
+ * Validate a portrait and store it in Supabase Storage under `founder/`
+ * (used for the founder photograph, which is not attached to a story).
  *
- * `publicUrl` is a web path such as "/images/portraits/imported/x.jpg", which
- * Next.js serves from the "public" directory. So we resolve it against
- * cwd()/public, NOT against cwd() directly.
+ * @returns the public URL and the Storage object path
+ * @throws UploadError with a user-safe message when validation/upload fails
  */
-export function publicImageExists(publicUrl: string): boolean {
-  if (!publicUrl || publicUrl.startsWith("http")) return false;
-  if (publicUrl.includes("..")) return false;
-  // Strip any leading slashes, then resolve inside the public folder.
-  const rel = publicUrl.replace(/^\/+/, "");
-  const full = path.join(process.cwd(), "public", rel);
-  return fs.existsSync(full);
+export async function saveFounderPortraitToStorage(
+  file: UploadedImage,
+  personName: string,
+): Promise<{ publicUrl: string; fileName: string; format: ImageFormat }> {
+  const format = validateImageBytes(file.buffer, file.declaredName || "portrait");
+
+  const supabase = await createSupabaseServerClient();
+  const objectPath = `founder/${uid()}-${descriptiveFileName(personName, format)}`;
+  const contentType =
+    format === "jpeg" ? "image/jpeg" : format === "png" ? "image/png" : "image/webp";
+
+  const upload = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(objectPath, file.buffer, { contentType, upsert: false });
+  if (upload.error) throw storageUploadError(upload.error);
+
+  const { data } = supabase.storage
+    .from(STORAGE_BUCKET)
+    .getPublicUrl(objectPath);
+
+  return { publicUrl: data.publicUrl, fileName: objectPath, format };
 }

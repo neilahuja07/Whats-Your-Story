@@ -166,23 +166,18 @@ export async function POST(req: NextRequest) {
       await supabase.storage.from(STORAGE_BUCKET).remove([previousPath]);
     }
 
-    recordPortraitImport({
+    await recordPortraitImport({
       storyId,
       fileName: objectPath,
       originalName: file.name,
-      // The story id is kept in the note: `story_id` is a foreign key to the
-      // legacy local `stories` table, so a Supabase story UUID cannot be
-      // stored there (see recordPortraitImport).
-      sourceNote: [sourceNote, sourceLink, `[story:${storyId}]`]
-        .filter(Boolean)
-        .join(" | "),
+      sourceNote: [sourceNote, sourceLink].filter(Boolean).join(" | "),
       personMatch: verified ? "confirmed" : "unconfirmed",
       permissionOk: verified,
       importedBy: admin.email,
     });
 
-    logActivity(
-      admin.id,
+    await logActivity(
+      admin,
       verified ? "portrait.verified" : "portrait.imported",
       "story",
       storyId,

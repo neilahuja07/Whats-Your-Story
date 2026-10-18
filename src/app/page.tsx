@@ -26,18 +26,18 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   init();
 
-  const headline = getSiteContentValue("home.headline");
-  const supportingText = getSiteContentValue("home.supporting_text");
-  const aboutHeading = getSiteContentValue("home.about_heading");
-  const aboutBody = getSiteContentValue("home.about_body");
+  const headline = await getSiteContentValue("home.headline");
+  const supportingText = await getSiteContentValue("home.supporting_text");
+  const aboutHeading = await getSiteContentValue("home.about_heading");
+  const aboutBody = await getSiteContentValue("home.about_body");
 
   const featured = await listFeaturedStories(3);
   const latest = await listPublishedStories({ pageSize: 6, sort: "newest" });
-  const founder = getFounderProfile();
+  const founder = await getFounderProfile();
 
   // Homepage hero collage: only photographs the admin selected in
   // Admin → Portraits (verified + enabled), in the admin's order.
-  const collagePortraits = listHomeCollagePortraits();
+  const collagePortraits = await listHomeCollagePortraits();
 
   // Sample content is detected from the returned stories (is_sample flag).
   const samples = [...featured, ...latest.items].some((s) => s.isSample);
@@ -246,7 +246,7 @@ export default async function HomePage() {
           <Reveal className="md:col-span-4">
             <Portrait
               src={founder.portraitUrl}
-              name={founder.name || "Our Founder"}
+              name={founder.name || "The Founder"}
               verified={founder.portraitVerified}
               className="aspect-[4/5] w-full"
               sizes="(max-width: 768px) 100vw, 33vw"
@@ -255,7 +255,7 @@ export default async function HomePage() {
 
           <Reveal delay={140} className="md:col-span-8">
             <SectionHeading
-              eyebrow="Our Founder"
+              eyebrow="The Founder"
               title="The Person Behind the Platform"
             />
             {founder.isDraft || !founder.name ? (

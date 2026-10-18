@@ -70,6 +70,7 @@ export default function RootLayout({
     // it only silences the attribute diff on <html> itself.
     <html
       lang="en"
+      dir="ltr"
       className={`${playfair.variable} ${inter.variable}`}
       suppressHydrationWarning
     >

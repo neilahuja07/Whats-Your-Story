@@ -128,13 +128,13 @@ function mapSubmission(row: Row, byName: Map<string, string>): StorySubmission {
 
 async function categoryNameMap(): Promise<Map<string, string>> {
   const map = new Map<string, string>();
-  for (const c of listCategories()) map.set(c.name.toLowerCase(), c.id);
+  for (const c of await listCategories()) map.set(c.name.toLowerCase(), c.id);
   return map;
 }
 
-function categoryNameFor(id: string | null): string {
+async function categoryNameFor(id: string | null): Promise<string> {
   if (!id) return "";
-  const found = listCategories().find((c) => c.id === id);
+  const found = (await listCategories()).find((c) => c.id === id);
   return found?.name ?? "";
 }
 
@@ -166,6 +166,7 @@ export async function createSubmission(
   // NOTE: no `.select()` here. The anonymous role may INSERT but has no SELECT
   // policy on story_submissions, so `INSERT ... RETURNING` would fail. The row
   // is rebuilt from the input instead.
+  const categoryName = await categoryNameFor(input.categoryId);
   const { error } = await supabase.from("story_submissions").insert({
     id,
     name: input.submitterName,
@@ -173,7 +174,7 @@ export async function createSubmission(
     title: input.storyTitle,
     content: input.storyContent,
     introduction: input.introduction,
-    category: categoryNameFor(input.categoryId),
+    category: categoryName,
     portrait_url: input.portraitUrl,
     linkedin_profile_url: input.linkedinProfileUrl,
     contact_number: input.contactNumber,
@@ -210,7 +211,7 @@ export async function createSubmission(
       title: input.storyTitle,
       content: input.storyContent,
       introduction: input.introduction,
-      category: categoryNameFor(input.categoryId),
+      category: categoryName,
       portrait_url: input.portraitUrl,
       linkedin_profile_url: input.linkedinProfileUrl,
       contact_number: input.contactNumber,

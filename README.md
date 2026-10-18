@@ -5,9 +5,11 @@ real-life stories about people: their experiences, struggles, achievements, and
 personal journeys.
 
 Built with **Next.js (App Router)**, **TypeScript**, **Tailwind CSS v4**, and
-**Lucide** icons. Story content, submissions and admin accounts live in
-**Supabase** (Postgres + Auth + Storage); a small local **SQLite** file keeps
-site content, the founder profile, categories and import history. See
+**Lucide** icons. All persistent data — stories, submissions, site content, the
+founder profile, categories, rate limiting, the activity log, admin accounts
+and every uploaded photograph — lives in **Supabase** (Postgres + Auth +
+Storage). There is no local database and no local upload directory, so the site
+deploys to serverless hosts (Vercel) unchanged. See
 [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md) to connect a project.
 
 ---
@@ -23,8 +25,12 @@ copy .env.example .env.local            # Windows
 # cp .env.example .env.local            # macOS / Linux
 # Fill in NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.
 
-# 3. Run the SQL in supabase_setup.sql (Supabase SQL Editor),
-#    create an admin user in Supabase Auth, and add its UUID to admin_users.
+# 3. Run these files, IN ORDER, in the Supabase SQL Editor:
+#      supabase_migration_contact_number.sql   (adds contact_number)
+#      supabase_setup.sql                      (base schema, RLS, bucket)
+#      supabase_migration_persistence.sql      (site content, founder, etc.)
+#      supabase_migration_local_data.sql       (carries over existing content)
+#    Then create an admin user in Supabase Auth and add its UUID to admin_users.
 
 # 4. Run the site
 npm run dev
@@ -58,12 +64,14 @@ required.
 | `NEXT_PUBLIC_SUPABASE_URL` | **Yes** | Your Supabase project URL (Settings → API). |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Yes** | Publishable / anon key. Never use the service-role key. |
 | `SITE_URL` | Recommended in production | Public origin used for canonical URLs, sitemap, and Open Graph tags. Example: `https://whatsyourstory.example.com` |
-| `UPLOAD_DIR` | Optional | Directory for locally uploaded images (e.g. founder portrait). Default `data/uploads`. |
-| `MAX_UPLOAD_MB` | Optional | Max upload size per file in MB. Default `5`. |
-| `DATA_DIR` | Optional | Directory for the local SQLite file. Default `data`. |
+| `MAX_UPLOAD_MB` | Optional | Max upload size per file in MB (Supabase Storage). Default `5`. |
 | `RESEND_API_KEY` | Optional | Resend API key for submission notification e-mails (server-side only). |
 | `STORY_NOTIFICATION_EMAIL` | Optional | Inbox that receives submission notifications (e.g. your personal address). |
 | `STORY_NOTIFICATION_FROM` | Optional | Verified Resend sender, e.g. `What's Your Story <notifications@yourdomain.com>`. |
+
+The old `DATA_DIR` and `UPLOAD_DIR` variables no longer exist: there is no
+local database and uploads go to Supabase Storage. Remove them from any
+`.env.local` and from the Vercel project settings.
 
 ---
 
@@ -179,9 +187,9 @@ person's photo and never a generated substitute.
 
 ### Rules enforced in code
 
-1. **Originals are preserved** — imported files are copied, never cropped or
-   re-encoded into a substitute.
-2. **Descriptive, person-based filenames** — e.g. `amara-okafor.jpg`.
+1. **Originals are preserved** — imported files are uploaded unchanged, never
+   cropped or re-encoded into a substitute.
+2. **Descriptive, person-based names** — e.g. `amara-okafor.jpg`.
 3. **Photographs are stored UNVERIFIED by default** and a placeholder is shown
    publicly until verification.
 4. **Verification is a separate, explicit step** confirming (a) the photo is of
@@ -201,6 +209,9 @@ founder photograph.
 
 ### Option B — Command line
 
+The CLI signs in with your administrator account (Supabase Auth — the same
+allowlist check as the admin panel) and uploads to Supabase Storage:
+
 ```bash
 # See available story slugs
 npm run import-portrait -- --list-stories
@@ -216,8 +227,8 @@ npm run import-portrait -- --story <slug> --file ~/amara.jpg --verified \
 npm run import-portrait -- --story <slug> --file ~/amara.jpg --dry-run
 ```
 
-Files land in `public/images/portraits/imported/`. See `public/images/CREDITS.md`
-for provenance notes.
+Files are stored in the Supabase Storage bucket `story-images` under
+`stories/<storyId>/`.
 
 ---
 
@@ -243,24 +254,32 @@ src/
     (panel)/           Server-side auth-gated admin layout
     api/admin/         Authenticated admin API routes
   components/          UI components (public + admin)
-  lib/                 Database, auth, repositories, sanitising, connectors
+  lib/                 Auth, repositories, sanitising, Supabase clients
 scripts/
-  import-portrait.mjs  Manual photograph import (local portrait workflow)
-supabase_setup.sql     Supabase schema, RLS policies and Storage bucket
+  import-portrait.mjs  Manual photograph import (Supabase Storage workflow)
+supabase_setup.sql                    Base schema, RLS policies, Storage bucket
+supabase_migration_contact_number.sql Adds story_submissions.contact_number
+supabase_migration_persistence.sql    Remaining tables + RPCs + RLS
+supabase_migration_local_data.sql     Carry-over of existing local content
 SUPABASE_SETUP.md      Step-by-step Supabase connection guide
-data/                  Local SQLite file + uploads (created automatically)
-public/images/         Bundled editorial images + imported portraits
+public/images/         Bundled editorial images
 ```
 
 ---
 
 ## Storage
 
-- **Supabase (primary):** `stories`, `story_submissions`, `admin_users`, admin
-  auth, and the public `story-images` Storage bucket. Run
-  [`supabase_setup.sql`](./supabase_setup.sql) once in the SQL Editor.
-- **Local SQLite:** site content, founder profile, categories, LinkedIn import
-  history, rate limits and the activity log live in `data/whatsyourstory.db`
-  (WAL mode), created automatically using Node's built-in `node:sqlite`.
-- **Local uploads:** `data/uploads` by default; the founder portrait and
-  CLI-imported photographs go to `public/images/portraits/imported/`.
+Everything lives in Supabase — there is no local database file and no local
+upload directory:
+
+- **Postgres:** `stories`, `story_submissions`, `admin_users` (from
+  [`supabase_setup.sql`](./supabase_setup.sql)) plus `site_content`,
+  `founder_profile`, `categories`, `activity_log`, `portrait_imports`,
+  `collage_portraits`, `submission_notifications` and `rate_limits` (from
+  [`supabase_migration_persistence.sql`](./supabase_migration_persistence.sql)).
+  Run them in the SQL Editor, in the order listed in the Quick start above.
+- **Auth:** admin credentials and sessions (Supabase Auth + the `admin_users`
+  allowlist).
+- **Storage:** the public `story-images` bucket — story covers under
+  `stories/<storyId>/`, homepage collage under `collage/`, the founder
+  portrait under `founder/`.

@@ -19,7 +19,7 @@ export default async function SubmissionDetailPage({
   if (!submission) notFound();
 
   // Local record of the admin notification e-mail (sent / failed / never).
-  const notification = getNotificationLog(submission.id);
+  const notification = await getNotificationLog(submission.id);
 
   return (
     <div>

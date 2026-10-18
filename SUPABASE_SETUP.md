@@ -4,14 +4,12 @@ This guide connects the **What's Your Story** website to Supabase. Follow the
 steps **in order**. Anything you must run yourself is marked clearly — the
 website never creates tables, buckets or admins on its own.
 
-> **What Supabase stores:** story text/metadata, submissions, cover images
-> (Storage bucket `story-images`) and admin accounts (Auth).
->
-> **What stays local:** site content, the founder profile, categories, LinkedIn
-> import history, rate-limit counters and the activity log (a small local
-> SQLite database). These features are outside the scope of this integration,
-> so both data stores run side by side. Story and submission *content* is
-> always read from and written to Supabase.
+> **Everything is stored in Supabase:** stories, submissions, site content,
+> the founder profile, categories, the activity log, portrait/collage records,
+> rate-limit counters, the e-mail notification log, admin accounts (Auth), and
+> every uploaded photograph (Storage bucket `story-images`, folders `stories/`,
+> `collage/` and `founder/`). There is no local database file and no local
+> upload directory, so the site runs unchanged on serverless hosts (Vercel).
 
 ---
 
@@ -30,25 +28,23 @@ In the left sidebar, click **SQL Editor** → **New query**.
 
 ---
 
-## 3. Review and run `supabase_setup.sql`
+## 3. Review and run the SQL files, in order
 
-1. Open the file [`supabase_setup.sql`](./supabase_setup.sql) in this project
-   and read it. It is written to be reviewed.
-2. Copy the **entire** file into the SQL editor and press **Run**.
+Open each file in this project, read it (they are written to be reviewed),
+copy the **entire** file into the SQL editor and press **Run** — in this
+exact order:
 
-It creates:
+| # | File | What it does |
+| --- | --- | --- |
+| 1 | [`supabase_migration_contact_number.sql`](./supabase_migration_contact_number.sql) | adds the nullable `contact_number` column to `story_submissions` |
+| 2 | [`supabase_setup.sql`](./supabase_setup.sql) | base schema: `stories`, `story_submissions`, `admin_users`, `is_admin()`, RLS, `story-images` bucket |
+| 3 | [`supabase_migration_persistence.sql`](./supabase_migration_persistence.sql) | the remaining tables (`site_content`, `founder_profile`, `categories`, `activity_log`, `portrait_imports`, `collage_portraits`, `submission_notifications`, `rate_limits`), their RLS, and the 5 SECURITY DEFINER RPCs used for rate limiting and the notification log |
+| 4 | [`supabase_migration_local_data.sql`](./supabase_migration_local_data.sql) | carries over the existing site content, founder profile, categories, homepage collage selection, portrait-import audit entries, activity log and notification log |
 
-| Object | Purpose |
-| --- | --- |
-| `public.stories` | published + draft stories (plus extra columns the site uses) |
-| `public.story_submissions` | public submissions, always starting at `pending_review` |
-| `public.admin_users` | allowlist of admin user IDs |
-| `public.is_admin()` | recursion-safe admin check (SECURITY DEFINER) |
-| RLS policies | public reads only published stories; admins manage everything |
-| `story-images` bucket | public read, admin-only write |
-
-It performs **no destructive operations**: no tables are dropped and no data is
-deleted. It is safe to run again later — only policies are replaced.
+Every file performs **no destructive operations**: no tables are dropped and
+no data is deleted. All of them are safe to run again later — tables use
+`create table if not exists`, policies are only replaced, and every data
+insert uses `on conflict do nothing`.
 
 ---
 
@@ -106,8 +102,11 @@ SITE_URL=http://localhost:3000
 
 Cover images can be uploaded from the admin panel (**Portraits** →
 choose a story → upload). Files are validated (JPEG/PNG/WebP by content) and
-stored in the public `story-images` bucket; only allow-listed admins may
-upload or delete.
+stored in the public `story-images` bucket under `stories/<storyId>/`; only
+allow-listed admins may upload or delete. The homepage collage
+(**Admin → Portraits**) stores files under `collage/`, and the founder
+photograph stores under `founder/` — all in the same bucket, whose policies
+cover every object in it.
 
 You can also upload manually via **Storage → story-images → Upload file**, then
 paste the public URL into a story's `cover_image_url` in the Table Editor.
@@ -203,6 +202,10 @@ admin login reports that Supabase is not configured — that is expected.
   the API at all — admins are added manually in the SQL editor. Admin checks go
   through `public.is_admin()`, which is `SECURITY DEFINER` with a fixed
   `search_path` to avoid recursion and search-path attacks.
+- `rate_limits` has **no grants and no policies at all**: it can only be read
+  or incremented through the `SECURITY DEFINER` RPCs
+  (`bump_rate_limit`, `rate_limit_count`, `clear_rate_limit`), so the public
+  API roles cannot tamper with the brute-force counters directly.
 - The four submission statuses are enforced by a database `CHECK` constraint:
   `pending_review`, `under_review`, `approved`, `rejected`.
 
@@ -228,13 +231,18 @@ schema:
    status maps onto these two columns; ordering and "featured new stories"
    behaviour is unchanged.
 4. **Category.** Stories store the category **name** in `category` (as
-   required); the app resolves the local category id/slug from it so the admin
-   editor and filters keep working.
-5. **Two data stores.** Local SQLite still serves site content, the founder
-   profile, categories, LinkedIn imports, rate limits and the activity log.
-6. **Sample stories are no longer auto-seeded** into SQLite. Everything now
-   lives in Supabase, so create real content via the admin panel. Starter
-   *categories* are still seeded locally.
+   required); the app resolves the category id/slug from the `categories`
+   table so the admin editor and filters keep working.
+5. **One data store.** Everything lives in Supabase Postgres: site content,
+   the founder profile, categories, portrait imports, rate limits, the
+   activity log and the notification log are served from the tables created
+   by `supabase_migration_persistence.sql`. The local SQLite file and the
+   local upload directory no longer exist.
+6. **Sample stories are no longer auto-seeded.** Everything lives in
+   Supabase, so create real content via the admin panel. Reference data
+   (categories, site content, founder) is carried over by
+   `supabase_migration_local_data.sql`; missing site-content keys fall back
+   to the built-in defaults in the code.
 7. **Admin accounts** are created in Supabase (steps 4–6). The old
    `npm run create-admin` script and `AUTH_SECRET` / `ADMIN_EMAIL` /
-   `ADMIN_PASSWORD` variables are obsolete.
+   `ADMIN_PASSWORD` / `DATA_DIR` / `UPLOAD_DIR` variables are obsolete.

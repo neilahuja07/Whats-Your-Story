@@ -13,7 +13,7 @@ export async function GET() {
   init();
   const admin = await getCurrentAdmin();
   if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  return NextResponse.json({ content: getSiteContent() });
+  return NextResponse.json({ content: await getSiteContent() });
 }
 
 /** PATCH — update a subset of site content keys. */
@@ -58,8 +58,21 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  setSiteContent(entries);
-  logActivity(admin.id, "content.updated", "site_content", null);
+  try {
+    await setSiteContent(entries);
+  } catch (err) {
+    console.error("[admin/content] save failed:", err);
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error && err.message
+            ? err.message
+            : "The content could not be saved. Please try again.",
+      },
+      { status: 500 },
+    );
+  }
+  await logActivity(admin, "content.updated", "site_content", null);
 
-  return NextResponse.json({ ok: true, content: getSiteContent() });
+  return NextResponse.json({ ok: true, content: await getSiteContent() });
 }

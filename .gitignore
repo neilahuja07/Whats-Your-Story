@@ -21,7 +21,8 @@ yarn-error.log*
 .env
 .env*.local
 
-# local database + uploads (never commit user data)
+# legacy local data (SQLite file + old local uploads; no longer used —
+# everything lives in Supabase, but keep any old local copies ignored)
 /data
 
 # typescript

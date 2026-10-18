@@ -30,13 +30,13 @@ import type {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
 
-function categoryMaps(): {
+async function categoryMaps(): Promise<{
   byId: Map<string, Category>;
   byName: Map<string, Category>;
-} {
+}> {
   const byId = new Map<string, Category>();
   const byName = new Map<string, Category>();
-  for (const c of listCategories()) {
+  for (const c of await listCategories()) {
     byId.set(c.id, c);
     byName.set(c.name.toLowerCase(), c);
   }
@@ -82,8 +82,8 @@ function mapStory(row: Row, byName: Map<string, Category>): Story {
   };
 }
 
-function mapRows(rows: Row[]): Story[] {
-  const { byName } = categoryMaps();
+async function mapRows(rows: Row[]): Promise<Story[]> {
+  const { byName } = await categoryMaps();
   return rows.map((r) => mapStory(r, byName));
 }
 
@@ -266,7 +266,7 @@ export async function listPublishedStories(
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return {
-    items: mapRows(rows),
+    items: await mapRows(rows),
     page: safePage,
     pageSize,
     total,
@@ -301,7 +301,7 @@ export async function getPublishedStoryBySlug(slug: string): Promise<Story | nul
     .eq("is_archived", false)
     .maybeSingle();
   if (error) log("getPublishedStoryBySlug", error);
-  return data ? mapRows([data as Row])[0] : null;
+  return data ? (await mapRows([data as Row]))[0] : null;
 }
 
 export async function getRelatedStories(
@@ -362,7 +362,7 @@ export async function getStoryById(id: string): Promise<Story | null> {
     .eq("id", id)
     .maybeSingle();
   if (error) log("getStoryById", error);
-  return data ? mapRows([data as Row])[0] : null;
+  return data ? (await mapRows([data as Row]))[0] : null;
 }
 
 export async function getStoryBySlug(slug: string): Promise<Story | null> {
@@ -374,7 +374,7 @@ export async function getStoryBySlug(slug: string): Promise<Story | null> {
     .eq("slug", slug)
     .maybeSingle();
   if (error) log("getStoryBySlug", error);
-  return data ? mapRows([data as Row])[0] : null;
+  return data ? (await mapRows([data as Row]))[0] : null;
 }
 
 export async function listAllStories(
@@ -415,7 +415,7 @@ export async function listAllStories(
   const rows = (data ?? []) as Row[];
   const total = count ?? rows.length;
   return {
-    items: mapRows(rows),
+    items: await mapRows(rows),
     page: safePage,
     pageSize,
     total,
@@ -497,12 +497,15 @@ export interface StoryInput {
   authorCredit: string;
 }
 
-function categoryNameFor(id: string | null): string {
+async function categoryNameFor(id: string | null): Promise<string> {
   if (!id) return "";
-  return getCategoryById(id)?.name ?? "";
+  return (await getCategoryById(id))?.name ?? "";
 }
 
-function toRow(input: StoryInput, publishedAt: string | null): Row {
+async function toRow(
+  input: StoryInput,
+  publishedAt: string | null,
+): Promise<Row> {
   return {
     slug: input.slug,
     title: input.title,
@@ -512,7 +515,7 @@ function toRow(input: StoryInput, publishedAt: string | null): Row {
     cover_image_url: input.portraitUrl,
     image_alt: input.imageAlt,
     portrait_verified: input.portraitVerified,
-    category: categoryNameFor(input.categoryId),
+    category: await categoryNameFor(input.categoryId),
     source_linkedin_url: input.sourceLinkedinUrl,
     source_linkedin_post_id: input.sourceLinkedinPostId,
     seo_title: input.seoTitle,
@@ -535,11 +538,11 @@ export async function createStory(input: StoryInput): Promise<Story> {
 
   const { data, error } = await supabase
     .from("stories")
-    .insert({ ...toRow(input, publishedAt), created_at: ts })
+    .insert({ ...(await toRow(input, publishedAt)), created_at: ts })
     .select("*")
     .single();
   if (error) throw storyWriteError("create", error);
-  return mapRows([data as Row])[0];
+  return (await mapRows([data as Row]))[0];
 }
 
 export async function updateStory(
@@ -558,12 +561,12 @@ export async function updateStory(
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("stories")
-    .update(toRow(input, publishedAt))
+    .update(await toRow(input, publishedAt))
     .eq("id", id)
     .select("*")
     .single();
   if (error) throw storyWriteError("update", error);
-  return mapRows([data as Row])[0];
+  return (await mapRows([data as Row]))[0];
 }
 
 /**
@@ -611,14 +614,14 @@ export async function patchStory(
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("stories")
-    .update(toRow(next, publishedAt))
+    .update(await toRow(next, publishedAt))
     .eq("id", id)
     .select("*")
     .single();
   // A database failure must never be reported as "story not found": the API
   // turns this into a 500 with a useful message instead of a fake success.
   if (error) throw storyWriteError("update", error);
-  return mapRows([data as Row])[0];
+  return (await mapRows([data as Row]))[0];
 }
 
 export async function setStoryStatus(

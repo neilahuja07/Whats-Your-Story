@@ -37,7 +37,7 @@ export async function POST(
   }
 
   const result = await notifyAdminOfSubmission(submission);
-  logActivity(admin.id, "submission.notify", "submission", id);
+  await logActivity(admin, "submission.notify", "submission", id);
 
   if (result.status === "sent") {
     return NextResponse.json({ ok: true, status: "sent" });

@@ -19,8 +19,8 @@ export function uid(): string {
 /**
  * Maximum number of portraits that may be ENABLED for the homepage hero
  * collage at once. Lives in this isomorphic module (not the repository) so
- * client components can import it without pulling `node:sqlite` into the
- * browser bundle.
+ * client components can import it without pulling server-only Supabase
+ * code into the browser bundle.
  */
 export const COLLAGE_MAX = 30;
 

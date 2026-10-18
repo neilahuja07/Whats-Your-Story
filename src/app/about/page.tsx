@@ -52,10 +52,10 @@ const PILLARS = [
   { k: "Permission led", v: "Nothing is published without consent." },
 ];
 
-export default function AboutPage() {
+export default async function AboutPage() {
   init();
-  const body = getSiteContentValue("about.page_body");
-  const vision = getSiteContentValue("about.vision");
+  const body = await getSiteContentValue("about.page_body");
+  const vision = await getSiteContentValue("about.vision");
 
   return (
     <>

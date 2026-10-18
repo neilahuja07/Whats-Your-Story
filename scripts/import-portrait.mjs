@@ -7,11 +7,21 @@
  *   1. the photograph is of the person named in the story, and
  *   2. you have permission to publish it on the website.
  *
- * The file is copied into public/images/portraits/imported/ under a
- * descriptive, person-based filename (e.g. "amara-okafor.jpg") and the story
- * record is updated. The photograph is stored as UNVERIFIED; verify it in the
- * admin panel (Stories → [story] → Portrait) to make it visible on the site
+ * The file is uploaded to the public Supabase Storage bucket `story-images`
+ * under stories/<storyId>/<person-slug>.<ext> and the story record is
+ * updated. The photograph is stored as UNVERIFIED; verify it in the admin
+ * panel (Stories → [story] → Portrait) to make it visible on the site —
  * until then a neutral placeholder is displayed.
+ *
+ * Nothing is written to the local filesystem (Vercel has no persistent disk).
+ *
+ * Setup (same as the website):
+ *   - NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are read
+ *     from the environment or from .env.local.
+ *   - Your administrator e-mail/password are asked for interactively (or set
+ *     SUPABASE_ADMIN_EMAIL / SUPABASE_ADMIN_PASSWORD). They are used ONLY to
+ *     obtain a Supabase Auth session — the same allowlist check (is_admin)
+ *     as the admin panel applies. No service-role key is ever used.
  *
  * Usage:
  *   npm run import-portrait -- --story <slug> --file <path-to-image> [options]
@@ -31,17 +41,12 @@
  *   npm run import-portrait -- --story journey-of-amara --file C:\photos\amara.jpg
  *   npm run import-portrait -- --story rebuilding-after-loss --file ~/amara.jpg --verified --note "From LinkedIn post 7123..."
  */
-import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
+import { createInterface } from "node:readline/promises";
 
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
-const DB_FILE = path.join(DATA_DIR, "whatsyourstory.db");
-const UPLOAD_SUBDIR = path.join("public", "images", "portraits", "imported");
-// Web path Next.js serves for that folder. Must start with "/" — a value like
-// "public/images/..." is rejected by next/image and breaks public pages.
-const UPLOAD_WEB_DIR = "/images/portraits/imported";
+const STORAGE_BUCKET = "story-images";
 
 function fail(msg) {
   console.error(`\x1b[31mError:\x1b[0m ${msg}`);
@@ -64,6 +69,24 @@ function parseArgs(argv) {
     }
   }
   return args;
+}
+
+/** Minimal .env.local reader (no extra dependency). */
+function loadEnvFile() {
+  const file = path.join(process.cwd(), ".env.local");
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/.exec(line);
+    if (!m) continue;
+    let value = m[2];
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (!(m[1] in process.env)) process.env[m[1]] = value;
+  }
 }
 
 function detectImageFormat(buf) {
@@ -101,29 +124,54 @@ if (args.help || (!args.story && !args["list-stories"])) {
   process.exit(0);
 }
 
-if (!fs.existsSync(DB_FILE)) {
+loadEnvFile();
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   fail(
-    `No database found at ${DB_FILE}.\nStart the website once (npm run dev) so the database is created, then re-run this command.`,
+    "NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set " +
+      "in the environment or in .env.local (see SUPABASE_SETUP.md).",
   );
 }
 
-const db = new DatabaseSync(DB_FILE);
-db.exec("PRAGMA foreign_keys = ON;");
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false },
+});
+
+async function signIn() {
+  let email = process.env.SUPABASE_ADMIN_EMAIL?.trim();
+  let password = process.env.SUPABASE_ADMIN_PASSWORD?.trim();
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  if (!email) email = (await rl.question("Admin e-mail: ")).trim();
+  if (!password) password = await rl.question("Admin password: ");
+  rl.close();
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.user) fail(`Sign-in failed: ${error?.message ?? "unknown error"}`);
+  const { data: isAdmin } = await supabase.rpc("is_admin");
+  if (isAdmin !== true) {
+    fail("This account is not in the admin_users allowlist (see SUPABASE_SETUP.md).");
+  }
+  return data.user;
+}
+
+const user = await signIn();
 
 if (args["list-stories"]) {
-  const rows = db
-    .prepare(
-      "SELECT slug, person_name, title, status, portrait_url FROM stories ORDER BY updated_at DESC",
-    )
-    .all();
-  if (rows.length === 0) {
+  const { data, error } = await supabase
+    .from("stories")
+    .select("slug, person_name, title, is_published, cover_image_url")
+    .order("updated_at", { ascending: false });
+  if (error) fail(`Could not list stories: ${error.message}`);
+  if (!data || data.length === 0) {
     console.log("No stories yet.");
   } else {
     console.log("\nAvailable stories:\n");
-    for (const r of rows) {
-      const photo = r.portrait_url ? `photo: ${r.portrait_url}` : "NO PHOTOGRAPH";
+    for (const r of data) {
+      const photo = r.cover_image_url ? `photo: ${r.cover_image_url}` : "NO PHOTOGRAPH";
+      const status = r.is_published ? "published" : "draft";
       console.log(`  ${r.slug}`);
-      console.log(`    ${r.person_name} — ${r.title} [${r.status}] (${photo})\n`);
+      console.log(`    ${r.person_name} — ${r.title} [${status}] (${photo})\n`);
     }
   }
   process.exit(0);
@@ -132,18 +180,21 @@ if (args["list-stories"]) {
 const slug = String(args.story);
 const filePath = String(args.file || "");
 
-const story = db
-  .prepare(
-    "SELECT id, slug, person_name, title, portrait_url FROM stories WHERE slug = ?",
-  )
-  .get(slug);
+const { data: story, error: storyError } = await supabase
+  .from("stories")
+  .select("id, slug, person_name, title, cover_image_url")
+  .eq("slug", slug)
+  .maybeSingle();
+if (storyError) fail(`Could not load the story: ${storyError.message}`);
 if (!story) {
-  const close = db
-    .prepare("SELECT slug FROM stories WHERE slug LIKE ? LIMIT 5")
-    .all(`%${slug}%`);
+  const { data: close } = await supabase
+    .from("stories")
+    .select("slug")
+    .like("slug", `%${slug}%`)
+    .limit(5);
   fail(
     `No story with slug "${slug}".` +
-      (close.length
+      (close && close.length
         ? `\nDid you mean:\n${close.map((c) => `  - ${c.slug}`).join("\n")}`
         : "\nRun with --list-stories to see available slugs."),
   );
@@ -165,79 +216,70 @@ if (!format) {
 
 const personName = String(args.person || story.person_name);
 const ext = format === "jpeg" ? "jpg" : format;
-const base = slugifyPerson(personName);
-const root = path.join(process.cwd(), UPLOAD_SUBDIR);
-
-let fileName = `${base}.${ext}`;
-let n = 2;
-while (fs.existsSync(path.join(root, fileName))) {
-  const existing = fs.readFileSync(path.join(root, fileName));
-  if (existing.equals(buf)) {
-    console.log(`\nAlready imported as ${fileName} — no changes made.`);
-    applyToStory(story.id, `${UPLOAD_WEB_DIR}/${fileName}`);
-    process.exit(0);
-  }
-  fileName = `${base}-${n}.${ext}`;
-  n++;
-}
-
-const publicUrl = `${UPLOAD_WEB_DIR}/${fileName}`;
-const verified = Boolean(args.verified);
-const note = args.note ? String(args.note) : "";
+const objectPath = `stories/${story.id}/${slugifyPerson(personName)}.${ext}`;
+const contentType =
+  format === "jpeg" ? "image/jpeg" : format === "png" ? "image/png" : "image/webp";
 
 console.log("\nPortrait import");
 console.log("---------------");
-console.log(`  Story:        ${story.slug} (${story.title})`);
-console.log(`  Person:       ${personName}`);
-console.log(`  Source file:  ${filePath} (${(buf.length / 1024).toFixed(0)} KB, ${format})`);
-console.log(`  Will save as: ${publicUrl}`);
-console.log(`  Verified:     ${verified ? "YES — will be visible immediately" : "no — placeholder shown until verified in the admin panel"}`);
-if (args.link) console.log(`  Source link:  ${args.link}`);
+console.log(`  Signed in as:  ${user.email}`);
+console.log(`  Story:         ${story.slug} (${story.title})`);
+console.log(`  Person:        ${personName}`);
+console.log(`  Source file:   ${filePath} (${(buf.length / 1024).toFixed(0)} KB, ${format})`);
+console.log(`  Will store as: ${objectPath} (bucket ${STORAGE_BUCKET})`);
+const verified = Boolean(args.verified);
+console.log(`  Verified:      ${verified ? "YES — will be visible immediately" : "no — placeholder shown until verified in the admin panel"}`);
+if (args.link) console.log(`  Source link:   ${args.link}`);
 if (args["dry-run"]) {
   console.log("\nDry run — nothing was written.\n");
   process.exit(0);
 }
 
-fs.mkdirSync(root, { recursive: true });
-fs.writeFileSync(path.join(root, fileName), buf);
-console.log(`\n✓ Photograph copied to ${publicUrl}`);
+const upload = await supabase.storage
+  .from(STORAGE_BUCKET)
+  .upload(objectPath, buf, { contentType, upsert: true });
+if (upload.error) fail(`Upload failed: ${upload.error.message}`);
+console.log(`\n✓ Photograph uploaded to ${STORAGE_BUCKET}/${objectPath}`);
 
-applyToStory(story.id, publicUrl, verified, note, personName, args.link);
+const { data: publicUrlData } = supabase.storage
+  .from(STORAGE_BUCKET)
+  .getPublicUrl(objectPath);
+const publicUrl = publicUrlData.publicUrl;
 
-function applyToStory(storyId, url, verify = false, sourceNote = "", person = "", link = "") {
-  const alt = args.alt
-    ? String(args.alt)
-    : `Portrait of ${person || story.person_name}`;
+const alt = args.alt ? String(args.alt) : `Portrait of ${personName}`;
+const { error: updateError } = await supabase
+  .from("stories")
+  .update({
+    cover_image_url: publicUrl,
+    image_alt: alt,
+    portrait_verified: verified,
+  })
+  .eq("id", story.id);
+if (updateError) fail(`Could not update the story: ${updateError.message}`);
 
-  if (verify) {
-    db.prepare(
-      `UPDATE stories SET portrait_url = ?, image_alt = ?, portrait_verified = 1, updated_at = datetime('now') WHERE id = ?`,
-    ).run(url, alt, storyId);
-    console.log("✓ Story updated — photograph verified and will display on the site.");
-  } else {
-    db.prepare(
-      `UPDATE stories SET portrait_url = ?, image_alt = ?, portrait_verified = 0, updated_at = datetime('now') WHERE id = ?`,
-    ).run(url, alt, storyId);
-    console.log(
-      "✓ Story updated — photograph stored as UNVERIFIED (neutral placeholder shows until you verify it in the admin panel).",
-    );
-  }
+console.log(
+  verified
+    ? "✓ Story updated — photograph verified and will display on the site."
+    : "✓ Story updated — photograph stored as UNVERIFIED (neutral placeholder shows until you verify it in the admin panel).",
+);
 
-  db.prepare(
-    `INSERT INTO portrait_imports
-      (id, story_id, file_name, original_name, source_note, person_match, permission_ok, imported_by, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-  ).run(
-    crypto.randomUUID(),
-    storyId,
-    fileName ?? path.basename(url),
-    path.basename(String(args.file || url)),
-    [sourceNote, link].filter(Boolean).join(" | "),
-    verify ? "confirmed" : "unconfirmed",
-    verify ? 1 : 0,
-    "cli",
-  );
-  console.log(
-    "\nNext step: open /admin/stories, open the story, and confirm the photograph\nmatches the person and that publication is permitted, then save.\n",
-  );
+const sourceNote = [args.note ? String(args.note) : "", args.link ? String(args.link) : ""]
+  .filter(Boolean)
+  .join(" | ");
+const { error: auditError } = await supabase.from("portrait_imports").insert({
+  story_id: story.id,
+  file_name: objectPath,
+  original_name: path.basename(String(args.file || "")),
+  source_note: sourceNote,
+  person_match: verified ? "confirmed" : "unconfirmed",
+  permission_ok: verified,
+  imported_by: `cli (${user.email})`,
+});
+if (auditError) {
+  console.warn(`⚠ Audit entry not written: ${auditError.message}`);
 }
+
+await supabase.auth.signOut();
+console.log(
+  "\nNext step: open /admin/stories, open the story, and confirm the photograph\nmatches the person and that publication is permitted, then save.\n",
+);

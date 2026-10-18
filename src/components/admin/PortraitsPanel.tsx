@@ -14,9 +14,9 @@ export default async function PortraitsPanel() {
   init();
 
   const stories = (await listAllStories({ pageSize: 200 })).items;
-  const founder = getFounderProfile();
-  const imports = listPortraitImports(50);
-  const collage = listCollagePortraits();
+  const founder = await getFounderProfile();
+  const imports = await listPortraitImports(50);
+  const collage = await listCollagePortraits();
 
   const withPhoto = stories.filter((s) => s.portraitUrl);
   const verified = withPhoto.filter((s) => s.portraitVerified);
@@ -29,11 +29,12 @@ export default async function PortraitsPanel() {
         <h1 className="font-serif text-h2 text-charcoal">Portraits</h1>
         <p className="mt-1 max-w-2xl text-[0.9rem] leading-relaxed text-muted">
           Manage the real photographs shown on story cards and story pages. Files
-          are stored in{" "}
-          <code className="bg-beige px-1 text-[0.78rem]">
-            public/images/portraits/imported/
-          </code>{" "}
-          with descriptive, person-based filenames. A neutral placeholder is shown
+          are stored in Supabase Storage (bucket{" "}
+          <code className="bg-beige px-1 text-[0.78rem]">story-images</code>,
+          folders{" "}
+          <code className="bg-beige px-1 text-[0.78rem]">stories/</code> and{" "}
+          <code className="bg-beige px-1 text-[0.78rem]">founder/</code>) under
+          descriptive, person-based names. A neutral placeholder is shown
           publicly for any story without a verified photograph.
         </p>
       </div>

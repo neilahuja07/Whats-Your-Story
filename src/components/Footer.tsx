@@ -7,7 +7,7 @@ const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/stories", label: "Discover Stories" },
   { href: "/about", label: "About Us" },
-  { href: "/founder", label: "Our Founder" },
+  { href: "/founder", label: "The Founder" },
   { href: "/share", label: "Share Your Story" },
 ];
 
@@ -16,11 +16,11 @@ const LEGAL_LINKS = [
   { href: "/terms", label: "Terms" },
 ];
 
-export function Footer() {
+export async function Footer() {
   init();
-  const description = getSiteContentValue("footer.description");
-  const contactEmail = getSiteContentValue("contact.email");
-  const linkedinUrl = getSiteContentValue("social.linkedin_url");
+  const description = await getSiteContentValue("footer.description");
+  const contactEmail = await getSiteContentValue("contact.email");
+  const linkedinUrl = await getSiteContentValue("social.linkedin_url");
 
   const year = new Date().getFullYear();
 

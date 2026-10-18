@@ -53,8 +53,8 @@ export async function POST(req: NextRequest) {
 
   // Check both buckets BEFORE doing any verification work.
   if (
-    !attemptAllowed(emailBucket, EMAIL_ATTEMPT_LIMIT) ||
-    !attemptAllowed(ipBucket, IP_ATTEMPT_LIMIT)
+    !(await attemptAllowed(emailBucket, EMAIL_ATTEMPT_LIMIT)) ||
+    !(await attemptAllowed(ipBucket, IP_ATTEMPT_LIMIT))
   ) {
     return NextResponse.json(
       {
@@ -67,8 +67,8 @@ export async function POST(req: NextRequest) {
 
   const { admin, error } = await signInAdmin(email, password);
   if (!admin) {
-    recordFailure(emailBucket);
-    recordFailure(ipBucket);
+    await recordFailure(emailBucket);
+    await recordFailure(ipBucket);
     const notConfigured = error?.includes("Supabase is not configured");
     return NextResponse.json(
       { error: notConfigured ? error : "Incorrect email or password." },
@@ -77,10 +77,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Success: clear this account's and this client's failure history.
-  clearAttempts(emailBucket);
-  clearAttempts(ipBucket);
+  await clearAttempts(emailBucket);
+  await clearAttempts(ipBucket);
 
-  logActivity(admin.id, "admin.login", "admin", admin.id);
+  await logActivity(admin, "admin.login", "admin", admin.id);
 
   return NextResponse.json({ ok: true, email: admin.email });
 }

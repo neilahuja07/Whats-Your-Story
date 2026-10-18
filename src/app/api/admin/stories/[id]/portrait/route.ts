@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { init } from "@/lib/bootstrap";
 import { getCurrentAdmin, logActivity } from "@/lib/auth";
 import { getStoryById, patchStory } from "@/lib/repositories/stories";
+import { updatePortraitVerificationForStory } from "@/lib/repositories/portraitImports";
 import { sanitizePlainText } from "@/lib/sanitize";
-import { getDb } from "@/lib/db";
 
 /**
  * PATCH /api/admin/stories/[id]/portrait
@@ -69,22 +69,13 @@ export async function PATCH(
   }
 
   // Record the verification decision against the imported photograph.
-  getDb()
-    .prepare(
-      `UPDATE portrait_imports
-       SET person_match = ?, permission_ok = ?,
-           source_note = CASE WHEN ? != '' THEN ? ELSE source_note END
-       WHERE story_id = ?`,
-    )
-    .run(
-      verified ? "confirmed" : "unconfirmed",
-      verified ? 1 : 0,
-      note,
-      note,
-      id,
-    );
+  await updatePortraitVerificationForStory(id, {
+    personMatch: verified ? "confirmed" : "unconfirmed",
+    permissionOk: verified,
+    note,
+  });
 
-  logActivity(admin.id, "portrait.verified", "story", id);
+  await logActivity(admin, "portrait.verified", "story", id);
 
   return NextResponse.json({ ok: true, verified });
 }

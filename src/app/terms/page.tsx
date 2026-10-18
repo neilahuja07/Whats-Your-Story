@@ -11,9 +11,9 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function TermsPage() {
+export default async function TermsPage() {
   init();
-  const body = getSiteContentValue("terms.page_body");
+  const body = await getSiteContentValue("terms.page_body");
   const isDraft = body.startsWith("DRAFT");
 
   return (

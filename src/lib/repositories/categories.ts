@@ -1,73 +1,120 @@
-import { getDb } from "@/lib/db";
 import { uid, slugify } from "@/lib/utils";
+import { createSupabasePublicClient, createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Category } from "@/lib/types";
 
+/**
+ * Categories repository (Supabase table `categories`).
+ *
+ * Reference data for the admin editors: stories and submissions store the
+ * category NAME, and these helpers supply the id ⇄ name mapping.
+ * Reads use the ANON client; writes use the administrator's session.
+ */
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
+type Row = Record<string, any>;
 
-export function listCategories(): Category[] {
-  const db = getDb();
-  const rows = db
-    .prepare("SELECT * FROM categories ORDER BY name ASC")
-    .all() as unknown[];
-  return rows.map((r: any) => ({
-    id: r.id,
-    name: r.name,
-    slug: r.slug,
-    description: r.description,
-  }));
-}
-
-export function getCategoryBySlug(slug: string): Category | null {
-  const db = getDb();
-  const r = db.prepare("SELECT * FROM categories WHERE slug = ?").get(slug) as
-    | any
-    | undefined;
-  if (!r) return null;
+function mapCategory(r: Row): Category {
   return {
     id: r.id,
     name: r.name,
     slug: r.slug,
-    description: r.description,
+    description: r.description ?? "",
   };
 }
 
-export function getCategoryById(id: string): Category | null {
-  const db = getDb();
-  const r = db.prepare("SELECT * FROM categories WHERE id = ?").get(id) as
-    | any
-    | undefined;
-  if (!r) return null;
-  return {
-    id: r.id,
-    name: r.name,
-    slug: r.slug,
-    description: r.description,
-  };
+function warnReadFailed(label: string, message: string): void {
+  console.error(`[categories] ${label}:`, message);
 }
 
-export function createCategory(
+/** Anonymous client for public reads, or `null` when Supabase is not set up. */
+function publicClient() {
+  try {
+    return createSupabasePublicClient();
+  } catch {
+    return null;
+  }
+}
+
+export async function listCategories(): Promise<Category[]> {
+  const supabase = publicClient();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("categories")
+    .select("*")
+    .order("name", { ascending: true });
+  if (error) {
+    warnReadFailed("listCategories", error.message);
+    return [];
+  }
+  return ((data ?? []) as Row[]).map(mapCategory);
+}
+
+export async function getCategoryBySlug(slug: string): Promise<Category | null> {
+  const supabase = publicClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) {
+    warnReadFailed("getCategoryBySlug", error.message);
+    return null;
+  }
+  return data ? mapCategory(data as Row) : null;
+}
+
+export async function getCategoryById(id: string): Promise<Category | null> {
+  const supabase = publicClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    warnReadFailed("getCategoryById", error.message);
+    return null;
+  }
+  return data ? mapCategory(data as Row) : null;
+}
+
+export async function createCategory(
   name: string,
   description = "",
-): Category {
-  const db = getDb();
+): Promise<Category> {
+  const supabase = await createSupabaseServerClient();
+
   let slug = slugify(name);
-  const exists = db.prepare("SELECT 1 AS x FROM categories WHERE slug = ?").get(slug);
-  if (exists) slug = `${slug}-${uid().slice(0, 6)}`;
+  const { data: existing } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("slug", slug)
+    .limit(1);
+  if ((existing ?? []).length > 0) slug = `${slug}-${uid().slice(0, 6)}`;
+
   const id = uid();
-  db.prepare(
-    "INSERT INTO categories (id, name, slug, description) VALUES (?, ?, ?, ?)",
-  ).run(id, name.trim(), slug, description);
-  return getCategoryById(id)!;
+  const { error } = await supabase
+    .from("categories")
+    .insert({ id, name: name.trim(), slug, description });
+  if (error) {
+    throw new Error(
+      /permission denied|row-level security|violates row-level/i.test(error.message)
+        ? "Supabase refused the change (Row Level Security). Confirm your account is listed in the admin_users table."
+        : `Could not create the category: ${error.message}`,
+    );
+  }
+  return { id, name: name.trim(), slug, description };
 }
 
 /** Find-or-create by name; returns the category id (or null for empty input). */
-export function ensureCategoryByName(name: string): string | null {
+export async function ensureCategoryByName(
+  name: string,
+): Promise<string | null> {
   const trimmed = name.trim();
   if (!trimmed) return null;
-  const db = getDb();
-  const row = db
-    .prepare("SELECT id FROM categories WHERE lower(name) = lower(?)")
-    .get(trimmed) as { id: string } | undefined;
-  if (row) return row.id;
-  return createCategory(trimmed).id;
+  const all = await listCategories();
+  const found = all.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
+  if (found) return found.id;
+  return (await createCategory(trimmed)).id;
 }

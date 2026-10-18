@@ -91,6 +91,16 @@
   input, textarea, select, button {
     font-family: inherit;
   }
+
+  /* Text direction guard: the site is English-only. Inputs, textareas and
+     rich-text editing areas are always left-to-right, left-aligned — no
+     stylesheet, extension or inherited rule may flip them. */
+  input,
+  textarea,
+  [contenteditable] {
+    direction: ltr;
+    text-align: left;
+  }
 }
 
 /* Utilities -------------------------------------------------------------- */

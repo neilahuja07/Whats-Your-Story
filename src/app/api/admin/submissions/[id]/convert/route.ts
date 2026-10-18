@@ -97,7 +97,7 @@ export async function POST(
     warning =
       "The draft story was created, but this submission could not be linked to it. Update the submission manually.";
   }
-  logActivity(admin.id, "submission.converted", "story", story.id);
+  await logActivity(admin, "submission.converted", "story", story.id);
 
   return NextResponse.json(
     warning ? { ok: true, story, warning } : { ok: true, story },

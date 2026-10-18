@@ -78,7 +78,7 @@ export async function PATCH(
       { status: 500 },
     );
   }
-  logActivity(admin.id, "submission.status", "submission", id);
+  await logActivity(admin, "submission.status", "submission", id);
 
   return NextResponse.json({ ok: true, submission: await getSubmissionById(id) });
 }

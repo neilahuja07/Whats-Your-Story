@@ -4,18 +4,41 @@ import { ButtonLink } from "@/components/ui/Button";
 import { Portrait } from "@/components/Portrait";
 import { Reveal } from "@/components/motion/Reveal";
 import { BackToTop } from "@/components/motion/BackToTop";
-import { ArrowRight } from "lucide-react";
+import { Linkedin } from "lucide-react";
 import { init } from "@/lib/bootstrap";
 import { getFounderProfile } from "@/lib/repositories/founder";
 
 export const metadata: Metadata = {
-  title: "Our Founder",
+  title: "The Founder",
   description:
     "The story behind What's Your Story, a platform built so that untold stories can be heard.",
   alternates: { canonical: "/founder" },
 };
 
 export const dynamic = "force-dynamic";
+
+/** Founder's public LinkedIn profile — the page's single call to action. */
+const LINKEDIN_URL = "https://www.linkedin.com/in/mananahujaofficial/";
+
+/**
+ * The one button on this page: opens the founder's LinkedIn profile in a
+ * new tab. Uses the design-system primary button so it matches the rest of
+ * the site; `inline-flex` sizing keeps it comfortable on mobile and desktop.
+ */
+function LinkedInButton() {
+  return (
+    <ButtonLink
+      href={LINKEDIN_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      size="lg"
+      className="mt-8"
+    >
+      Connect on LinkedIn
+      <Linkedin className="h-4 w-4" aria-hidden="true" />
+    </ButtonLink>
+  );
+}
 
 /** Split long-form text into paragraphs, guarding against empty renders. */
 function Paragraphs({ text, className }: { text: string; className: string }) {
@@ -30,9 +53,9 @@ function Paragraphs({ text, className }: { text: string; className: string }) {
   );
 }
 
-export default function FounderPage() {
+export default async function FounderPage() {
   init();
-  const founder = getFounderProfile();
+  const founder = await getFounderProfile();
   const isDraft = founder.isDraft || !founder.name;
 
   return (
@@ -40,7 +63,6 @@ export default function FounderPage() {
       {/* Header */}
       <section className="border-b border-line bg-beige/30">
         <Container className="py-16 md:py-24">
-          <Eyebrow>Our Founder</Eyebrow>
           <h1 className="anim-in anim-fade-up mt-4 max-w-3xl font-serif text-display-sm text-charcoal">
             {isDraft ? "The Person Behind the Platform" : founder.name}
           </h1>
@@ -67,7 +89,7 @@ export default function FounderPage() {
             <Reveal className="md:col-span-5">
               <Portrait
                 src={founder.portraitUrl}
-                name="Our Founder"
+                name="The Founder"
                 verified={founder.portraitVerified}
                 className="aspect-[4/5] w-full"
                 sizes="(max-width: 768px) 100vw, 40vw"
@@ -111,11 +133,7 @@ export default function FounderPage() {
                 </p>
               </div>
 
-              <div className="mt-10">
-                <ButtonLink href="/share" size="lg">
-                  Share Your Story
-                </ButtonLink>
-              </div>
+              <LinkedInButton />
             </Reveal>
           </Container>
         </section>
@@ -185,14 +203,7 @@ export default function FounderPage() {
                   decides that what happened to them might matter to somebody
                   else.
                 </p>
-                <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-                  <ButtonLink href="/share" size="lg">
-                    Share Your Story
-                  </ButtonLink>
-                  <ButtonLink href="/stories" variant="secondary" size="lg">
-                    Read the stories <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                  </ButtonLink>
-                </div>
+                <LinkedInButton />
               </Reveal>
             </div>
           </Container>

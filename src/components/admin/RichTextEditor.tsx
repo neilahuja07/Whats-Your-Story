@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
+
+/**
+ * `useLayoutEffect` writes external content into the editable area before
+ * paint (no empty-frame flash). During SSR it degrades to `useEffect` so the
+ * server render never warns about layout effects.
+ */
+const useIsoLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
 import {
   Bold,
   Italic,
@@ -20,6 +28,19 @@ import {
  * Produces a small HTML subset (p, h2, h3, strong, em, ul, ol, li,
  * blockquote, a) which is sanitised again on the server before storing
  * and before rendering.
+ *
+ * ── Controlled contentEditable, done correctly ─────────────────────────
+ * This component must NEVER bind `dangerouslySetInnerHTML` to the live
+ * `value` prop. `onInput` pushes every keystroke into that prop, so React
+ * would rewrite `innerHTML` after EVERY key press; rewriting innerHTML
+ * destroys the selection, the caret collapses to offset 0, and the next
+ * character is inserted at the START of the content — typed text then
+ * appears in reverse ("hi" → "ih") and the reversed string is what gets
+ * saved. Instead the DOM is the source of truth while typing:
+ * `lastHtmlRef` records the last HTML this editor itself emitted, and the
+ * prop is written back into the DOM only when it differs from that marker
+ * (i.e. an EXTERNAL change such as the initial load or switching stories).
+ * That leaves the caret, the selection, and the native undo stack alone.
  */
 export function RichTextEditor({
   value,
@@ -29,16 +50,38 @@ export function RichTextEditor({
   onChange: (html: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  /** Last HTML emitted by (or applied to) this editor; `null` until first sync. */
+  const lastHtmlRef = useRef<string | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
+
+  // Sync DOM ← prop ONLY for external changes. Echoes of this editor's own
+  // edits (value === lastHtmlRef) are skipped so the DOM — and with it the
+  // caret and selection — is never touched while typing.
+  useIsoLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (value === lastHtmlRef.current) return;
+    if (el.innerHTML !== value) el.innerHTML = value;
+    lastHtmlRef.current = value;
+  }, [value]);
+
+  /** Record + publish an edit (DOM is already correct at this point). */
+  const emit = useCallback(
+    (html: string) => {
+      lastHtmlRef.current = html;
+      onChange(html);
+    },
+    [onChange],
+  );
 
   const exec = useCallback(
     (command: string, arg?: string) => {
       ref.current?.focus();
       document.execCommand(command, false, arg);
-      if (ref.current) onChange(ref.current.innerHTML);
+      if (ref.current) emit(ref.current.innerHTML);
     },
-    [onChange],
+    [emit],
   );
 
   const wrap = useCallback(
@@ -55,9 +98,9 @@ export function RichTextEditor({
         false,
         `<${tag}>${text}</${tag}>`,
       );
-      if (ref.current) onChange(ref.current.innerHTML);
+      if (ref.current) emit(ref.current.innerHTML);
     },
-    [onChange],
+    [emit],
   );
 
   function applyLink() {
@@ -175,17 +218,19 @@ export function RichTextEditor({
         </div>
       )}
 
-      {/* Editable area */}
+      {/* Editable area.
+          No `dangerouslySetInnerHTML` here — content is synced by the
+          external-change effect above, so React never rewrites the DOM
+          during typing (see the component doc for the full reasoning). */}
       <div
         ref={ref}
         contentEditable
         suppressContentEditableWarning
+        dir="ltr"
         role="textbox"
         aria-multiline="true"
         aria-label="Story content"
-        // Initial content only; subsequent edits flow through onChange.
-        dangerouslySetInnerHTML={{ __html: value }}
-        onInput={(e) => onChange((e.target as HTMLDivElement).innerHTML)}
+        onInput={(e) => emit((e.target as HTMLDivElement).innerHTML)}
         className="prose-story min-h-[420px] px-5 py-4 focus:outline-none"
       />
 
