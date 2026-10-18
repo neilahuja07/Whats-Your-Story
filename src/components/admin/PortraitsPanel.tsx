@@ -3,8 +3,10 @@ import { init } from "@/lib/bootstrap";
 import { listAllStories } from "@/lib/repositories/stories";
 import { getFounderProfile } from "@/lib/repositories/founder";
 import { listPortraitImports } from "@/lib/repositories/portraitImports";
+import { listCollagePortraits } from "@/lib/repositories/collagePortraits";
 import { formatDate } from "@/lib/utils";
 import { PortraitImportCard } from "@/components/admin/PortraitImportCard";
+import { CollageManager } from "@/components/admin/CollageManager";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,7 @@ export default async function PortraitsPanel() {
   const stories = (await listAllStories({ pageSize: 200 })).items;
   const founder = getFounderProfile();
   const imports = listPortraitImports(50);
+  const collage = listCollagePortraits();
 
   const withPhoto = stories.filter((s) => s.portraitUrl);
   const verified = withPhoto.filter((s) => s.portraitVerified);
@@ -41,6 +44,20 @@ export default async function PortraitsPanel() {
         <Stat label="Awaiting verification" value={unverified.length} tone="text-amber-700" />
         <Stat label="No photograph yet" value={missing.length} tone="text-muted" />
       </div>
+
+      {/* Homepage hero collage */}
+      <section className="mt-8 border border-line bg-paper p-6">
+        <h2 className="font-serif text-h4 text-charcoal">Homepage collage</h2>
+        <p className="mt-2 max-w-2xl text-[0.88rem] leading-relaxed text-muted">
+          The portraits shown in the homepage hero. Files are uploaded to
+          Supabase Storage (bucket{" "}
+          <code className="bg-beige px-1 text-[0.78rem]">story-images</code>,
+          folder <code className="bg-beige px-1 text-[0.78rem]">collage/</code>
+          ). Only verified photographs that are selected appear publicly, in
+          the order shown here — up to 30 at a time.
+        </p>
+        <CollageManager initialPortraits={collage} />
+      </section>
 
       {/* Quick guide */}
       <section className="mt-8 border border-line bg-paper p-6">

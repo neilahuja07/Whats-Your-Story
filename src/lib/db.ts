@@ -145,6 +145,42 @@ const MIGRATIONS: string[] = [
     count      INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (bucket, window_start)
   );
+
+  -- Tracks the admin notification email for each public submission so a
+  -- failed send can be retried from the admin panel. Local-only (like the
+  -- rate limiter and activity log); no Supabase schema change required.
+  CREATE TABLE IF NOT EXISTS submission_notifications (
+    id            TEXT PRIMARY KEY,
+    submission_id TEXT NOT NULL UNIQUE,
+    fingerprint   TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'pending'
+                  CHECK (status IN ('sent','failed','skipped')),
+    error         TEXT NOT NULL DEFAULT '',
+    attempts      INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_submission_notifications_fingerprint
+    ON submission_notifications(fingerprint);
+  `,
+
+  // Homepage hero collage. Metadata only — the image files live in the
+  // existing public Supabase Storage bucket (story-images, collage/ folder).
+  // Local like the site content and audit tables, so no Supabase schema
+  // change is required.
+  `
+  CREATE TABLE IF NOT EXISTS collage_portraits (
+    id            TEXT PRIMARY KEY,
+    storage_path  TEXT NOT NULL,
+    url           TEXT NOT NULL,
+    original_name TEXT NOT NULL DEFAULT '',
+    verified      INTEGER NOT NULL DEFAULT 0,
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    sort_order    INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_collage_portraits_order ON collage_portraits(sort_order);
   `,
 ];
 

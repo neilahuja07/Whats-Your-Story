@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { init } from "@/lib/bootstrap";
 import { getSubmissionById } from "@/lib/repositories/submissions";
+import { getNotificationLog } from "@/lib/email";
 import { formatDate } from "@/lib/utils";
 import { SubmissionDetail } from "@/components/admin/SubmissionDetail";
 
@@ -17,6 +18,9 @@ export default async function SubmissionDetailPage({
   const submission = await getSubmissionById(id);
   if (!submission) notFound();
 
+  // Local record of the admin notification e-mail (sent / failed / never).
+  const notification = getNotificationLog(submission.id);
+
   return (
     <div>
       <Link
@@ -29,11 +33,12 @@ export default async function SubmissionDetailPage({
       <div className="mt-6">
         <h1 className="font-serif text-h2 text-charcoal">{submission.storyTitle}</h1>
         <p className="mt-2 text-[0.9rem] text-muted">
-          Submitted {formatDate(submission.createdAt)} by {submission.submitterName}
+          Interest entry received {formatDate(submission.createdAt)} from{" "}
+          {submission.submitterName}
         </p>
       </div>
 
-      <SubmissionDetail submission={submission} />
+      <SubmissionDetail submission={submission} notification={notification} />
     </div>
   );
 }

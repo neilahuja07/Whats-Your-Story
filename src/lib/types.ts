@@ -72,6 +72,7 @@ export interface StorySubmission {
   categoryId: string | null;
   portraitUrl: string;
   linkedinProfileUrl: string;
+  contactNumber: string;
   city: string;
   additionalMessage: string;
   allowNameDisplay: boolean;
@@ -140,6 +141,26 @@ export interface AdminUser {
   id: string;
   email: string;
   createdAt: string;
+}
+
+/**
+ * One photograph in the homepage hero collage (Admin → Portraits).
+ *
+ * The image file lives in the public Supabase Storage bucket; this record
+ * holds the metadata the collage needs: verification state, whether it is
+ * enabled for the homepage (at most COLLAGE_MAX at once) and the
+ * administrator's display order.
+ */
+export interface CollagePortrait {
+  id: string;
+  storagePath: string;
+  url: string;
+  originalName: string;
+  verified: boolean;
+  enabled: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DashboardMetrics {

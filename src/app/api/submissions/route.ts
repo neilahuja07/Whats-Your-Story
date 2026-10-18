@@ -3,22 +3,51 @@ import { getDb } from "@/lib/db";
 import { init } from "@/lib/bootstrap";
 import { createSubmission } from "@/lib/repositories/submissions";
 import { sanitizeMultilineText, sanitizePlainText } from "@/lib/sanitize";
-import { isValidEmail, isValidLinkedInUrl, nowIso } from "@/lib/utils";
+import {
+  countWords,
+  isValidEmail,
+  isValidLinkedInUrl,
+  isValidPhone,
+  nowIso,
+} from "@/lib/utils";
+import {
+  notifyAdminOfSubmission,
+  recentlyNotified,
+  submissionFingerprint,
+} from "@/lib/email";
 import type { ConsentRecord } from "@/lib/types";
 
 /**
  * POST /api/submissions — public story submission endpoint.
  *
- * Security:
+ * The public form collects exactly six required fields plus two mandatory
+ * permission confirmations. Security:
  *  - server-side validation of every field (client checks are UX only)
  *  - per-IP rate limiting (fixed window, stored in SQLite)
+ *  - request-size cap before parsing
  *  - consent text + timestamp recorded with the submission
  *  - no mass assignment: only whitelisted fields are read from the body
  *  - submissions are stored with status "pending_review" — never published
+ *
+ * Notification:
+ *  - after the row is safely stored, an e-mail notification is sent to the
+ *    administrator via Resend (best effort — an e-mail failure never fails
+ *    the submission and is recorded locally for retry from the admin panel)
+ *  - identical repeated submissions inside a short window do not send a
+ *    second notification
  */
 
 const RATE_LIMIT_PER_HOUR = 5;
-const CONSENT_VERSION = "2026-01";
+/** Bumped when the recorded consent wording changes (2026-10: interest-entry wording). */
+const CONSENT_VERSION = "2026-10";
+/** Reject oversized requests before parsing. */
+const MAX_BODY_BYTES = 20_000;
+const MAX_INTRO_WORDS = 150;
+
+const CONSENT_PUBLISH_TEXT =
+  "I agree to the use of my name and, if separately confirmed, my photograph if my story is published.";
+const CONSENT_AUTHORSHIP_TEXT =
+  "I confirm that this is my experience, or I have permission to share it, and agree to its editorial review.";
 
 function clientIp(req: NextRequest): string {
   const fwd = req.headers.get("x-forwarded-for");
@@ -60,6 +89,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Reject oversized payloads before doing any work.
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { error: "Your introduction is too long — please keep it under 150 words." },
+      { status: 413 },
+    );
+  }
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -75,28 +113,40 @@ export async function POST(req: NextRequest) {
 
   const submitterName = sanitizePlainText(body.submitterName, 120);
   const email = sanitizePlainText(body.email, 254);
-  const storyTitle = sanitizePlainText(body.storyTitle, 200);
-  const storyContent = sanitizeMultilineText(body.storyContent, 60_000);
-  const introduction = sanitizeMultilineText(body.introduction, 2000);
-  const city = sanitizePlainText(body.city, 120);
+  const contactNumber = sanitizePlainText(body.contactNumber, 40);
   const linkedinProfileUrl = sanitizePlainText(body.linkedinProfileUrl, 300);
-  const additionalMessage = sanitizeMultilineText(body.additionalMessage, 3000);
-  const categoryId = typeof body.categoryId === "string" && body.categoryId ? body.categoryId : null;
-  const allowNameDisplay = body.allowNameDisplay === true;
-  const allowPortraitDisplay = body.allowPortraitDisplay === true;
-  const consentGiven = body.consent === true;
+  const city = sanitizePlainText(body.city, 120);
+  const introduction = sanitizeMultilineText(body.introduction, 8000);
+  const consentPublish = body.consentPublish === true;
+  const consentAuthorship = body.consentAuthorship === true;
 
-  if (!submitterName) errors.submitterName = "Please tell us your name.";
+  if (!submitterName) errors.submitterName = "Please tell us your full name.";
   if (!email) errors.email = "Please add your email address.";
   else if (!isValidEmail(email)) errors.email = "That email address doesn't look right.";
-  if (!storyTitle) errors.storyTitle = "Please give your story a title.";
-  if (!storyContent) errors.storyContent = "Please write your story.";
-  else if (storyContent.length > 60_000)
-    errors.storyContent = "Your story is too long — please keep it under 60,000 characters.";
-  if (linkedinProfileUrl && !isValidLinkedInUrl(linkedinProfileUrl))
-    errors.linkedinProfileUrl = "Please enter a valid LinkedIn profile URL.";
-  if (!consentGiven)
-    errors.consent = "Please confirm you have the right to submit this story.";
+  if (!contactNumber)
+    errors.contactNumber = "Please add a contact number.";
+  else if (!isValidPhone(contactNumber))
+    errors.contactNumber =
+      "That phone number doesn't look right — include the country code if it's international (e.g. +44 20 7946 0958).";
+  if (!linkedinProfileUrl)
+    errors.linkedinProfileUrl = "Please add your LinkedIn profile URL.";
+  else if (!isValidLinkedInUrl(linkedinProfileUrl))
+    errors.linkedinProfileUrl =
+      "Please enter a valid LinkedIn profile URL (https://www.linkedin.com/in/…).";
+  if (!city) errors.city = "Please add your city or state.";
+
+  if (!introduction)
+    errors.introduction =
+      "Please write a brief introduction about yourself.";
+  else if (countWords(introduction) > MAX_INTRO_WORDS)
+    errors.introduction = `Please keep your introduction to ${MAX_INTRO_WORDS} words or fewer (currently ${countWords(introduction)}).`;
+
+  if (!consentPublish)
+    errors.consentPublish =
+      "Please confirm the permission to use your name so we can review your entry.";
+  if (!consentAuthorship)
+    errors.consentAuthorship =
+      "Please confirm that this is your experience or that you have permission to share it.";
 
   if (Object.keys(errors).length > 0) {
     return NextResponse.json(
@@ -106,40 +156,35 @@ export async function POST(req: NextRequest) {
   }
 
   /* --------------------------- consent --------------------------- */
+  const acceptedAt = nowIso();
+  const userAgent = sanitizePlainText(req.headers.get("user-agent"), 300) || null;
   const consentRecords: ConsentRecord[] = [
-    {
-      text: `Consent to submission (v${CONSENT_VERSION}): I confirm that I have the right to submit this story and its contents, and I agree that What's Your Story may review my submission and contact me about it. I understand that submitting a story does not automatically publish it or grant permission for public publication.`,
-      version: CONSENT_VERSION,
-      acceptedAt: nowIso(),
-      ip,
-      userAgent: sanitizePlainText(req.headers.get("user-agent"), 300) || null,
-    },
+    { text: CONSENT_PUBLISH_TEXT, version: CONSENT_VERSION, acceptedAt, ip, userAgent },
+    { text: CONSENT_AUTHORSHIP_TEXT, version: CONSENT_VERSION, acceptedAt, ip, userAgent },
   ];
 
   /* --------------------------- storage --------------------------- */
   try {
-    // Validate the category exists (prevents arbitrary FK values).
-    let safeCategoryId: string | null = null;
-    if (categoryId) {
-      const cat = getDb()
-        .prepare("SELECT id FROM categories WHERE id = ?")
-        .get(categoryId) as { id: string } | undefined;
-      safeCategoryId = cat?.id ?? null;
-    }
+    // The public form has no title/story-body fields, but the table requires
+    // both. Derive them from the introduction — no schema change needed.
+    const storyTitle =
+      introduction.split(/\s+/).slice(0, 10).join(" ").replace(/[.,;:!?-]*$/, "") +
+      (countWords(introduction) > 10 ? "…" : "");
 
     const submission = await createSubmission({
       submitterName,
       email,
       storyTitle,
-      storyContent,
+      storyContent: introduction,
       introduction,
-      categoryId: safeCategoryId,
+      categoryId: null, // No category field on the public form.
       portraitUrl: "", // Photographs are only accepted via admin review.
       linkedinProfileUrl,
+      contactNumber,
       city,
-      additionalMessage,
-      allowNameDisplay,
-      allowPortraitDisplay,
+      additionalMessage: "",
+      allowNameDisplay: consentPublish,
+      allowPortraitDisplay: consentPublish,
       consentRecords,
     });
 
@@ -147,10 +192,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "We couldn't save your story just now. Please try again in a moment.",
+            "We couldn't save your entry just now. Please try again in a moment.",
         },
         { status: 500 },
       );
+    }
+
+    // ---- Notification (best effort, AFTER the submission is safe) ----
+    // An e-mail failure must never undo or jeopardise the saved submission,
+    // so any error is swallowed here and recorded server-side for retry.
+    const fingerprint = submissionFingerprint(email, storyTitle, introduction);
+    try {
+      if (recentlyNotified(fingerprint)) {
+        // Same story submitted again moments ago (double submit / retry):
+        // the submission is stored, but no second notification is sent.
+        console.info(
+          `[email] Duplicate submission ${submission.id} — notification suppressed.`,
+        );
+      } else {
+        await notifyAdminOfSubmission(submission);
+      }
+    } catch (err) {
+      console.error("[email] Notification step failed:", err);
     }
 
     return NextResponse.json(
@@ -162,7 +225,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "We couldn't save your story just now. Please try again in a moment.",
+          err instanceof Error && /contact_number/i.test(err.message)
+            ? err.message
+            : "We couldn't save your entry just now. Please try again in a moment.",
       },
       { status: 500 },
     );

@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import { Container } from "@/components/ui/Layout";
 import { init } from "@/lib/bootstrap";
-import { getSiteContentValue } from "@/lib/repositories/siteContent";
-import { listCategories } from "@/lib/repositories/categories";
 import { SubmissionForm } from "@/components/share/SubmissionForm";
 
 export const metadata: Metadata = {
   title: "Share Your Story",
   description:
-    "Submit your story to What's Your Story. Every submission is read by our editorial team before anything is published.",
+    "Show your interest at What's Your Story. Introduce yourself briefly and our editorial team will contact you if your experience is a good fit.",
   alternates: { canonical: "/share" },
   robots: { index: true, follow: true },
 };
@@ -17,9 +15,6 @@ export const dynamic = "force-dynamic";
 
 export default function SharePage() {
   init();
-  const intro = getSiteContentValue("share.page_intro");
-  const consentText = getSiteContentValue("share.consent_text");
-  const categories = listCategories();
 
   return (
     <>
@@ -28,19 +23,26 @@ export default function SharePage() {
         <Container className="py-16 md:py-24">
           <span className="eyebrow">Contribute</span>
           <h1 className="anim-in anim-fade-up mt-4 max-w-3xl font-serif text-display-sm text-charcoal">
-            Share Your Story
+            Every Story Begins With a Conversation
           </h1>
           <span
             aria-hidden="true"
             className="rule-gold anim-in anim-rule-in mt-7"
             style={{ animationDelay: "160ms" }}
           />
-          <p
-            className="anim-in anim-fade-up mt-7 max-w-2xl text-[1.05rem] leading-relaxed text-muted"
+          <div
+            className="anim-in anim-fade-up mt-7 max-w-2xl space-y-4 text-[1.05rem] leading-relaxed text-muted"
             style={{ animationDelay: "240ms" }}
           >
-            {intro}
-          </p>
+            <p>Have an experience worth sharing? We&apos;d love to hear from you.</p>
+            <p>
+              Tell us a little about yourself and what makes your journey unique.
+              This is just an expression of interest, not your complete story. If
+              your entry interests our editorial team, we&apos;ll contact you to
+              discuss your story and explore the possibility of featuring it on
+              What&apos;s Your Story.
+            </p>
+          </div>
           <p
             className="anim-in anim-fade-up mt-5 inline-flex items-center gap-2 border border-gold/40 bg-paper px-4 py-2 text-[0.82rem] text-charcoal-soft"
             style={{ animationDelay: "320ms" }}
@@ -57,10 +59,7 @@ export default function SharePage() {
           <div className="grid gap-12 md:grid-cols-12 md:gap-16">
             {/* Form */}
             <div className="md:col-span-8">
-              <SubmissionForm
-                categories={categories.map((c) => ({ id: c.id, name: c.name }))}
-                consentText={consentText}
-              />
+              <SubmissionForm />
             </div>
             {/* Sidebar: what happens next + privacy */}
             <aside className="md:col-span-4">
@@ -73,26 +72,38 @@ export default function SharePage() {
                     <li className="flex gap-3">
                       <span className="mt-0.5 font-serif text-gold">1</span>
                       <span>
-                        You receive a confirmation that your submission arrived.
+                        <strong className="font-semibold text-charcoal-soft">
+                          Share your interest
+                        </strong>
+                        . Tell us a little about yourself using the short form.
                       </span>
                     </li>
                     <li className="flex gap-3">
                       <span className="mt-0.5 font-serif text-gold">2</span>
                       <span>
-                        A member of our editorial team reads your story.
+                        <strong className="font-semibold text-charcoal-soft">
+                          Our team reviews your entry
+                        </strong>
+                        . Our editorial team will review your introduction and
+                        consider whether your experience would be a good fit for
+                        the platform.
                       </span>
                     </li>
                     <li className="flex gap-3">
                       <span className="mt-0.5 font-serif text-gold">3</span>
                       <span>
-                        If it is selected, we contact you to confirm the
-                        permissions needed before anything is published.
+                        <strong className="font-semibold text-charcoal-soft">
+                          Let&apos;s talk
+                        </strong>
+                        . If we&apos;re interested in featuring your story,
+                        we&apos;ll contact you to discuss your experience and the
+                        next steps.
                       </span>
                     </li>
                   </ol>
                   <p className="mt-5 border-t border-line pt-4 text-[0.84rem] italic text-muted">
-                    Submitting a story does not guarantee publication, and your
-                    story is never published automatically.
+                    Submitting an entry does not guarantee publication. Nothing
+                    will be published without your explicit permission.
                   </p>
                 </div>
 
@@ -114,11 +125,12 @@ export default function SharePage() {
 
                 <div className="border border-line bg-paper p-7">
                   <h2 className="font-serif text-h4 text-charcoal">
-                    Prefer to write at length?
+                    Keep it brief
                   </h2>
                   <p className="mt-4 text-[0.9rem] leading-relaxed text-muted">
-                    There is no word limit. Take as much space as your story
-                    needs — we will shape it together during editing.
+                    There&apos;s no need to write your full story now. A short
+                    introduction of up to 150 words is all we need to get
+                    started.
                   </p>
                 </div>
               </div>

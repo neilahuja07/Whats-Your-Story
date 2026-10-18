@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, Quote, Feather } from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import {
   Container,
   WideContainer,
@@ -11,166 +11,17 @@ import { StoryCard } from "@/components/StoryCard";
 import { Portrait } from "@/components/Portrait";
 import { Reveal } from "@/components/motion/Reveal";
 import { BackToTop } from "@/components/motion/BackToTop";
+import { HeroCollage } from "@/components/home/HeroCollage";
 import { init } from "@/lib/bootstrap";
 import {
   listPublishedStories,
   listFeaturedStories,
 } from "@/lib/repositories/stories";
+import { listHomeCollagePortraits } from "@/lib/repositories/collagePortraits";
 import { getFounderProfile } from "@/lib/repositories/founder";
 import { getSiteContentValue } from "@/lib/repositories/siteContent";
-import type { Story } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
-/**
- * Hero collage — real published photographs arranged asymmetrically with a
- * gentle stagger on load. Falls back to a typographic composition when there
- * are no published stories, so nothing is ever faked.
- */
-function HeroCollage({ stories }: { stories: Story[] }) {
-  const [a, b, c] = stories;
-
-  if (!a) {
-    return <HeroTypographic />;
-  }
-
-  return (
-    <div className="relative">
-      {/* Soft editorial backdrop */}
-      <span
-        aria-hidden="true"
-        className="absolute -inset-4 -z-10 hidden bg-[radial-gradient(circle_at_70%_30%,rgba(182,149,91,0.12),transparent_62%)] md:block"
-      />
-
-      <div className="grid grid-cols-12 gap-3 md:gap-4">
-        {/* Tall anchor portrait */}
-        <div className="col-span-7">
-          <Reveal as="div" delay={260}>
-            <figure className="zoom-frame relative overflow-hidden bg-beige aspect-[3/4]">
-              <Portrait
-                src={a.portraitUrl}
-                name={a.personName}
-                verified={a.portraitVerified}
-                alt={a.imageAlt}
-                className="h-full w-full"
-                sizes="(max-width: 768px) 60vw, 30vw"
-                priority
-              />
-              <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-charcoal/75 to-transparent p-4 pt-12">
-                <p className="font-sans text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-gold-light">
-                  {a.personName}
-                </p>
-                {a.excerpt && (
-                  <p className="mt-1 line-clamp-1 font-serif text-[0.95rem] italic text-ivory">
-                    {a.excerpt}
-                  </p>
-                )}
-              </figcaption>
-            </figure>
-          </Reveal>
-        </div>
-
-        {/* Staggered secondary column */}
-        <div className="col-span-5 flex flex-col gap-3 pt-8 md:gap-4 md:pt-12">
-          {b && (
-            <Reveal as="div" delay={400}>
-              <figure className="zoom-frame relative overflow-hidden bg-beige aspect-square">
-                <Portrait
-                  src={b.portraitUrl}
-                  name={b.personName}
-                  verified={b.portraitVerified}
-                  alt={b.imageAlt}
-                  className="h-full w-full"
-                  sizes="(max-width: 768px) 40vw, 18vw"
-                  priority
-                />
-              </figure>
-            </Reveal>
-          )}
-
-          <Reveal as="div" delay={540}>
-            <blockquote className="border-l-2 border-gold pl-4">
-              <Quote className="h-4 w-4 text-gold" aria-hidden="true" />
-              <p className="mt-2 font-serif text-[0.98rem] leading-snug italic text-charcoal-soft">
-                Behind every face is a journey.
-              </p>
-            </blockquote>
-          </Reveal>
-
-          {c && (
-            <Reveal as="div" delay={660}>
-              <figure className="zoom-frame relative overflow-hidden bg-beige aspect-[4/3]">
-                <Portrait
-                  src={c.portraitUrl}
-                  name={c.personName}
-                  verified={c.portraitVerified}
-                  alt={c.imageAlt}
-                  className="h-full w-full"
-                  sizes="(max-width: 768px) 40vw, 18vw"
-                />
-              </figure>
-            </Reveal>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** No published stories: an abstract editorial composition instead of portraits. */
-function HeroTypographic() {
-  return (
-    <div className="relative">
-      <span
-        aria-hidden="true"
-        className="absolute -inset-4 -z-10 hidden bg-[radial-gradient(circle_at_70%_30%,rgba(182,149,91,0.12),transparent_62%)] md:block"
-      />
-      <div className="grid grid-cols-12 gap-3 md:gap-4">
-        <Reveal as="div" delay={260} className="col-span-7">
-          <div className="flex aspect-[3/4] flex-col justify-between border border-line bg-paper p-7">
-            <Feather className="h-6 w-6 text-gold" aria-hidden="true" />
-            <div>
-              <p className="font-serif text-[3.4rem] leading-none text-gold/45 md:text-[4.4rem]">
-                &ldquo;
-              </p>
-              <p className="mt-3 font-serif text-[1.15rem] leading-snug italic text-charcoal">
-                Every life carries something worth passing on.
-              </p>
-              <span aria-hidden="true" className="rule-gold mt-5" />
-            </div>
-          </div>
-        </Reveal>
-        <div className="col-span-5 flex flex-col gap-3 pt-8 md:gap-4 md:pt-12">
-          <Reveal as="div" delay={400}>
-            <div className="border border-line bg-beige/40 p-6">
-              <p className="font-sans text-[0.6rem] font-semibold uppercase tracking-[0.24em] text-gold-deep">
-                First person
-              </p>
-              <p className="mt-2 font-serif text-[1.05rem] leading-snug text-charcoal">
-                Told by the people who lived them.
-              </p>
-            </div>
-          </Reveal>
-          <Reveal as="div" delay={520}>
-            <div className="border border-line bg-paper p-6">
-              <p className="font-sans text-[0.6rem] font-semibold uppercase tracking-[0.24em] text-gold-deep">
-                With permission
-              </p>
-              <p className="mt-2 font-serif text-[1.05rem] leading-snug text-charcoal">
-                Nothing is published without consent.
-              </p>
-            </div>
-          </Reveal>
-          <Reveal as="div" delay={640}>
-            <div className="rule-diamond py-2">
-              <span className="h-1.5 w-1.5 rotate-45 bg-gold" />
-            </div>
-          </Reveal>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default async function HomePage() {
   init();
@@ -183,6 +34,10 @@ export default async function HomePage() {
   const featured = await listFeaturedStories(3);
   const latest = await listPublishedStories({ pageSize: 6, sort: "newest" });
   const founder = getFounderProfile();
+
+  // Homepage hero collage: only photographs the admin selected in
+  // Admin → Portraits (verified + enabled), in the admin's order.
+  const collagePortraits = listHomeCollagePortraits();
 
   // Sample content is detected from the returned stories (is_sample flag).
   const samples = [...featured, ...latest.items].some((s) => s.isSample);
@@ -234,39 +89,10 @@ export default async function HomePage() {
                 Share Your Story
               </ButtonLink>
             </div>
-
-            {/* Story count — only rendered when it comes back accurately. */}
-            {hasStories && (
-              <p
-                className="anim-in anim-fade-up mt-9 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8rem] text-muted"
-                style={{ animationDelay: "480ms" }}
-              >
-                <span className="font-serif text-[1.6rem] leading-none text-gold-deep">
-                  {storyCount}
-                </span>
-                <span className="font-sans text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-charcoal-soft">
-                  {storyCount === 1 ? "story published" : "stories published"}
-                </span>
-                <span aria-hidden="true" className="h-px w-8 bg-line" />
-                <span>and counting</span>
-              </p>
-            )}
-
-            {/* Scroll indicator */}
-            <a
-              href="#featured"
-              className="anim-in anim-fade-up group mt-12 hidden items-center gap-3 text-[0.66rem] font-semibold uppercase tracking-[0.2em] text-muted transition-colors hover:text-gold-deep md:inline-flex"
-              style={{ animationDelay: "560ms" }}
-            >
-              <span className="relative block h-10 w-px overflow-hidden bg-line">
-                <span className="absolute inset-x-0 top-0 h-3 animate-[wys-fade-up_1.8s_ease-in-out_infinite] bg-gold" />
-              </span>
-              Scroll to read
-            </a>
           </div>
 
           <div className="md:col-span-5">
-            <HeroCollage stories={showcase} />
+            <HeroCollage portraits={collagePortraits} />
           </div>
         </Container>
 

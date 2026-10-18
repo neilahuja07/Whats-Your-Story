@@ -44,10 +44,10 @@ export default async function AdminSubmissionsPage({
   return (
     <div>
       <div>
-        <h1 className="font-serif text-h2 text-charcoal">Story submissions</h1>
+        <h1 className="font-serif text-h2 text-charcoal">Interest entries</h1>
         <p className="mt-1 text-[0.9rem] text-muted">
-          {result.total} submission{result.total === 1 ? "" : "s"} received.
-          Contact details are only shown when a submission is opened.
+          {result.total} entr{result.total === 1 ? "y" : "ies"} received.
+          Contact details are only shown when an entry is opened.
         </p>
       </div>
 
@@ -55,9 +55,9 @@ export default async function AdminSubmissionsPage({
 
       {result.items.length === 0 ? (
         <div className="mt-8 border border-line bg-paper p-12 text-center">
-          <p className="font-serif text-h4 text-charcoal">No submissions yet</p>
+          <p className="font-serif text-h4 text-charcoal">No entries yet</p>
           <p className="mt-2 text-[0.9rem] text-muted">
-            Stories submitted through{" "}
+            Interest entries submitted through{" "}
             <Link href="/share" className="text-gold-deep underline underline-offset-2">
               /share
             </Link>{" "}

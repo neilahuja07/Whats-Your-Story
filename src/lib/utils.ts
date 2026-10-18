@@ -16,6 +16,14 @@ export function uid(): string {
   return uuid();
 }
 
+/**
+ * Maximum number of portraits that may be ENABLED for the homepage hero
+ * collage at once. Lives in this isomorphic module (not the repository) so
+ * client components can import it without pulling `node:sqlite` into the
+ * browser bundle.
+ */
+export const COLLAGE_MAX = 30;
+
 /** UTC ISO-8601 timestamp. */
 export function nowIso(): string {
   return new Date().toISOString();
@@ -70,6 +78,25 @@ export function isValidLinkedInUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Accepts valid international phone formats, with or without a country code,
+ * including separators: "+44 20 7946 0958", "(555) 123-4567", "0044…".
+ * Requires 7–15 digits (E.164 maximum).
+ */
+export function isValidPhone(input: string): boolean {
+  const trimmed = input.trim();
+  if (!/^\+?[\d\s\-().]{6,24}$/.test(trimmed)) return false;
+  const digits = trimmed.replace(/\D/g, "");
+  return digits.length >= 7 && digits.length <= 15;
+}
+
+/** Word count of trimmed text (whitespace-separated). */
+export function countWords(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).length;
 }
 
 export function isTrueFlag(v: unknown): boolean {

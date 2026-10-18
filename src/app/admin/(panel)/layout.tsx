@@ -20,7 +20,7 @@ export const metadata = {
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/stories", label: "Stories", icon: BookOpen },
-  { href: "/admin/submissions", label: "Submissions", icon: Inbox },
+  { href: "/admin/submissions", label: "Interest entries", icon: Inbox },
   { href: "/admin/portraits", label: "Portraits", icon: ImageIcon },
   { href: "/admin/founder", label: "Founder", icon: UserRound },
   { href: "/admin/content", label: "Site Content", icon: FileText },

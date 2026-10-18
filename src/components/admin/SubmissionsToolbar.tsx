@@ -62,7 +62,7 @@ export function SubmissionsToolbar({
         role="search"
       >
         <label htmlFor="sub-search" className="sr-only">
-          Search submissions
+          Search entries
         </label>
         <input
           id="sub-search"

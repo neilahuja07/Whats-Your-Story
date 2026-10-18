@@ -7,12 +7,22 @@ import {
   Mail,
   MapPin,
   Linkedin,
+  Phone,
   Loader2,
   CheckCircle2,
   AlertCircle,
   FileEdit,
 } from "lucide-react";
 import type { StorySubmission, SubmissionReviewStatus } from "@/lib/types";
+
+/** Shape returned by `getNotificationLog()` on the server. */
+export interface NotificationLog {
+  submissionId: string;
+  status: "sent" | "failed" | "skipped" | null;
+  error: string;
+  attempts: number;
+  updatedAt: string | null;
+}
 
 const STATUS_OPTIONS: { value: SubmissionReviewStatus; label: string }[] = [
   { value: "pending_review", label: "Pending review" },
@@ -23,8 +33,10 @@ const STATUS_OPTIONS: { value: SubmissionReviewStatus; label: string }[] = [
 
 export function SubmissionDetail({
   submission,
+  notification,
 }: {
   submission: StorySubmission;
+  notification: NotificationLog;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<SubmissionReviewStatus>(submission.reviewStatus);
@@ -32,6 +44,37 @@ export function SubmissionDetail({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [converting, setConverting] = useState(false);
+  const [notif, setNotif] = useState<NotificationLog>(notification);
+  const [resending, setResending] = useState(false);
+
+  // The current form records two consent entries (publishing + authorship).
+  const authorshipConfirmed = submission.consentRecords.length >= 2;
+
+  async function resendNotification() {
+    setResending(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/submissions/${submission.id}/notify`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage({ type: "err", text: data.error || "The notification could not be sent." });
+        return;
+      }
+      setNotif((prev) => ({
+        ...prev,
+        status: "sent",
+        error: "",
+        attempts: prev.attempts + 1,
+        updatedAt: new Date().toISOString(),
+      }));
+      setMessage({ type: "ok", text: "Notification e-mail sent." });
+      router.refresh();
+    } finally {
+      setResending(false);
+    }
+  }
 
   async function save() {
     setBusy(true);
@@ -86,7 +129,9 @@ export function SubmissionDetail({
       {/* Main: story content */}
       <div className="space-y-6 lg:col-span-2">
         <section className="border border-line bg-paper p-6">
-          <h2 className="font-serif text-h4 text-charcoal">Submitted story</h2>
+          <h2 className="font-serif text-h4 text-charcoal">
+            Submitted introduction
+          </h2>
           <div className="prose-story mt-4 text-[0.98rem]">
             {submission.storyContent.split(/\n{2,}/).map((p, i) => (
               <p key={i}>{p}</p>
@@ -94,16 +139,19 @@ export function SubmissionDetail({
           </div>
         </section>
 
-        {submission.introduction && (
-          <section className="border border-line bg-paper p-6">
-            <h2 className="font-serif text-h4 text-charcoal">
-              Introduction about the person
-            </h2>
-            <p className="mt-3 text-[0.95rem] leading-relaxed text-charcoal-soft">
-              {submission.introduction}
-            </p>
-          </section>
-        )}
+        {/* Older submissions may carry a separate introduction; the current
+            public form stores the same text in both fields. */}
+        {submission.introduction &&
+          submission.introduction !== submission.storyContent && (
+            <section className="border border-line bg-paper p-6">
+              <h2 className="font-serif text-h4 text-charcoal">
+                Introduction about the person
+              </h2>
+              <p className="mt-3 text-[0.95rem] leading-relaxed text-charcoal-soft">
+                {submission.introduction}
+              </p>
+            </section>
+          )}
 
         {submission.additionalMessage && (
           <section className="border border-line bg-paper p-6">
@@ -144,18 +192,16 @@ export function SubmissionDetail({
                 className={`h-4 w-4 ${submission.allowNameDisplay ? "text-emerald-600" : "text-muted"}`}
                 aria-hidden="true"
               />
-              Permission to display name:{" "}
-              <strong>{submission.allowNameDisplay ? "granted" : "not granted"}</strong>
+              Consent to publish name / photograph:{" "}
+              <strong>{submission.allowNameDisplay ? "confirmed" : "NOT confirmed"}</strong>
             </p>
             <p className="flex items-center gap-2 text-charcoal-soft">
               <CheckCircle2
-                className={`h-4 w-4 ${submission.allowPortraitDisplay ? "text-emerald-600" : "text-muted"}`}
+                className={`h-4 w-4 ${authorshipConfirmed ? "text-emerald-600" : "text-muted"}`}
                 aria-hidden="true"
               />
-              Permission to display photograph:{" "}
-              <strong>
-                {submission.allowPortraitDisplay ? "granted" : "not granted"}
-              </strong>
+              Authorship / permission to share:{" "}
+              <strong>{authorshipConfirmed ? "confirmed" : "NOT confirmed"}</strong>
             </p>
           </div>
         </section>
@@ -175,6 +221,17 @@ export function SubmissionDetail({
                 {submission.email}
               </a>
             </li>
+            {submission.contactNumber && (
+              <li className="flex items-center gap-2.5 text-charcoal-soft">
+                <Phone className="h-4 w-4 text-gold" aria-hidden="true" />
+                <a
+                  href={`tel:${submission.contactNumber.replace(/[^\d+]/g, "")}`}
+                  className="break-all text-gold-deep underline underline-offset-2 hover:text-charcoal"
+                >
+                  {submission.contactNumber}
+                </a>
+              </li>
+            )}
             {submission.city && (
               <li className="flex items-center gap-2.5 text-charcoal-soft">
                 <MapPin className="h-4 w-4 text-gold" aria-hidden="true" />
@@ -198,6 +255,47 @@ export function SubmissionDetail({
               <li className="text-muted">Category: {submission.categoryName}</li>
             )}
           </ul>
+        </section>
+
+        <section className="border border-line bg-paper p-6">
+          <h2 className="font-serif text-h4 text-charcoal">Notification</h2>
+          <p className="mt-3 text-[0.85rem] leading-relaxed text-muted">
+            {notif.status === "sent" ? (
+              <>
+                E-mail notification sent
+                {notif.updatedAt ? ` ${formatTimestamp(notif.updatedAt)}` : ""}.
+                {notif.attempts > 1 ? ` (${notif.attempts} attempts)` : ""}
+              </>
+            ) : notif.status === "failed" ? (
+              <>
+                The last notification attempt
+                {notif.updatedAt ? ` on ${formatTimestamp(notif.updatedAt)}` : ""}{" "}
+                failed. The submission itself is safely stored.
+                {notif.error ? (
+                  <span className="mt-2 block break-words font-mono text-[0.75rem] text-red-700">
+                    {notif.error}
+                  </span>
+                ) : null}
+              </>
+            ) : notif.status === "skipped" ? (
+              <>Notification was skipped — e-mail is not configured on this server.</>
+            ) : (
+              <>No notification has been recorded for this submission.</>
+            )}
+          </p>
+          <button
+            type="button"
+            disabled={resending}
+            onClick={resendNotification}
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 border border-line bg-paper px-5 py-3 font-sans text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-charcoal transition-colors hover:border-gold hover:text-gold-deep disabled:opacity-50"
+          >
+            {resending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Mail className="h-4 w-4" aria-hidden="true" />
+            )}
+            {notif.status === "sent" ? "Resend notification" : "Send notification"}
+          </button>
         </section>
 
         <section className="border border-line bg-paper p-6">

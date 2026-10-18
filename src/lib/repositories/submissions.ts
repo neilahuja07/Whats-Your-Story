@@ -111,6 +111,7 @@ function mapSubmission(row: Row, byName: Map<string, string>): StorySubmission {
     categoryId: category ? byName.get(category.toLowerCase()) ?? null : null,
     portraitUrl: row.portrait_url ?? "",
     linkedinProfileUrl: row.linkedin_profile_url ?? "",
+    contactNumber: row.contact_number ?? "",
     city: row.city ?? "",
     additionalMessage: row.additional_message ?? "",
     allowNameDisplay: Boolean(row.allow_name_display),
@@ -146,6 +147,7 @@ export interface SubmissionInput {
   categoryId: string | null;
   portraitUrl: string;
   linkedinProfileUrl: string;
+  contactNumber: string;
   city: string;
   additionalMessage: string;
   allowNameDisplay: boolean;
@@ -174,6 +176,7 @@ export async function createSubmission(
     category: categoryNameFor(input.categoryId),
     portrait_url: input.portraitUrl,
     linkedin_profile_url: input.linkedinProfileUrl,
+    contact_number: input.contactNumber,
     city: input.city,
     additional_message: input.additionalMessage,
     allow_name_display: input.allowNameDisplay,
@@ -188,6 +191,13 @@ export async function createSubmission(
 
   if (error) {
     log("createSubmission", error);
+    // The contact_number column was added by a later migration — surface a
+    // specific, actionable message instead of a generic failure.
+    if (/contact_number/i.test(error.message ?? "")) {
+      throw new Error(
+        "The contact_number column is missing in Supabase. Run supabase_migration_contact_number.sql in the SQL Editor, then try again.",
+      );
+    }
     return null;
   }
 
@@ -203,6 +213,7 @@ export async function createSubmission(
       category: categoryNameFor(input.categoryId),
       portrait_url: input.portraitUrl,
       linkedin_profile_url: input.linkedinProfileUrl,
+      contact_number: input.contactNumber,
       city: input.city,
       additional_message: input.additionalMessage,
       allow_name_display: input.allowNameDisplay,

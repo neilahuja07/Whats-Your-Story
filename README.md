@@ -61,6 +61,90 @@ required.
 | `UPLOAD_DIR` | Optional | Directory for locally uploaded images (e.g. founder portrait). Default `data/uploads`. |
 | `MAX_UPLOAD_MB` | Optional | Max upload size per file in MB. Default `5`. |
 | `DATA_DIR` | Optional | Directory for the local SQLite file. Default `data`. |
+| `RESEND_API_KEY` | Optional | Resend API key for submission notification e-mails (server-side only). |
+| `STORY_NOTIFICATION_EMAIL` | Optional | Inbox that receives submission notifications (e.g. your personal address). |
+| `STORY_NOTIFICATION_FROM` | Optional | Verified Resend sender, e.g. `What's Your Story <notifications@yourdomain.com>`. |
+
+---
+
+## Email notifications (Resend)
+
+Every story submitted through `/share` is saved to Supabase first and then
+emailed to you via [Resend](https://resend.com) — **if** the three variables
+above are configured. Submissions are **always saved**, even when e-mail is
+not configured or delivery fails; a failed e-mail is recorded locally and can
+be retried from **Admin → Submissions → open a submission → Send/Resend
+notification**.
+
+### 1. Create a Resend account
+
+Sign up at [resend.com](https://resend.com). The free tier (3,000 e-mails /
+month) is more than enough. No paid service is required.
+
+### 2. Create an API key
+
+In the Resend dashboard: **API Keys → Create API Key**. Give it any name
+(e.g. `whatsyourstory-local`) and copy the key (it starts with `re_`).
+
+### 3. Configure a sender address
+
+- **Easiest (development):** Resend provides a shared sandbox domain
+  (`onboarding@resend.dev`) that works immediately — you can send to your own
+  address while your Resend account is unverified. Use it as
+  `STORY_NOTIFICATION_FROM="What's Your Story <onboarding@resend.dev>"`.
+- **Production:** verify your domain in **Domains → Add Domain**, then create
+  a sender on that domain (e.g. `notifications@yourdomain.com`). See
+  [Resend's domain guide](https://resend.com/docs/dashboard/domains/introduction).
+
+### 4. Fill in `.env.local`
+
+Open `.env.local` (do **not** commit it) and add:
+
+```bash
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxx
+STORY_NOTIFICATION_EMAIL=you@example.com
+STORY_NOTIFICATION_FROM="What's Your Story <onboarding@resend.dev>"
+```
+
+### 5. Restart the development server
+
+Environment variables are read at startup:
+
+```bash
+# stop the server (Ctrl+C), then:
+npm run dev
+```
+
+If any of the three variables is missing, the server logs a clear warning in
+development and notifications are silently skipped — nothing breaks.
+
+### 6. Test a submission
+
+1. Open [http://localhost:3000/share](http://localhost:3000/share) and submit
+   a story with a valid name, email, title and content, and the consent box
+   ticked.
+2. You should see the thank-you screen; the submission appears in
+   [http://localhost:3000/admin/submissions](http://localhost:3000/admin/submissions)
+   with status **Pending review**.
+3. The notification e-mail arrives at `STORY_NOTIFICATION_EMAIL` with the
+   subject **“New Interest Entry — What's Your Story: <title>”**.
+4. Open the submission in the admin panel to see the delivery status and a
+   **Resend notification** button.
+
+### 7. Troubleshooting
+
+| Symptom | Likely cause / fix |
+| --- | --- |
+| Server log: `Submission notifications are disabled — missing: …` | One or more of the three variables is absent from `.env.local`, or the server was not restarted after adding them. |
+| Admin panel says “Notification was skipped — e-mail is not configured” | Same as above. |
+| `Resend rejected the request: HTTP 422 — …` | `STORY_NOTIFICATION_FROM` address/domain is not verified in Resend. Use the sandbox sender for testing. |
+| `Resend rejected the request: HTTP 401 — …` | `RESEND_API_KEY` is wrong or revoked. Create a new key. |
+| Email sent but not received | Check spam; confirm `STORY_NOTIFICATION_EMAIL` is correct; check the Resend **Logs** dashboard for delivery status. |
+| Duplicate submissions, no second e-mail | Intentional: identical submissions within 10 minutes are stored but do not re-notify. Use **Resend notification** in the admin panel if you need it again. |
+
+The API key is only ever read in server code (`src/lib/email.ts` and the API
+routes). It is never exposed to the browser — there is no
+`NEXT_PUBLIC_` variable involved.
 
 ---
 

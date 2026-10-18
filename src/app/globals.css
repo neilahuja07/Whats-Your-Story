@@ -294,6 +294,211 @@
 }
 
 /* ============================================================
+   Intro overlay — first-visit brand emblem (session-scoped).
+   An ivory-and-gold circular emblem based on the original reference:
+   golden ring, stacked serif lettering, vintage microphone, fountain
+   pen drawing the underline, and a heartbeat waveform at the ring's
+   base. Choreography (independently animated elements):
+     1. 0.15–1.0s  "What's / Your / Story" fades up as ONE composition
+     2. 0.85–1.7s  the golden ring + vintage microphone fade in
+     3. 1.55–2.6s  the fountain pen glides L→R, drawing the gold underline
+                   beneath "Story" (pen and stroke share the exact same
+                   timing so the nib tracks the line's tip)
+     4. 2.6–3.1s   the heartbeat waveform appears at the ring's base
+     5. 3.2–3.85s  the emblem holds, then fades away to the homepage
+   Pure CSS — no hydration cost. Ends visibility: hidden so the homepage
+   stays reachable even if JavaScript never runs. The inline script in
+   IntroOverlay sets [data-wys-intro="off"] before first paint for
+   repeat visits and /admin, hiding the overlay pre-hydration.
+   ============================================================ */
+
+.wys-intro-overlay {
+  --wys-emblem: min(84vmin, 520px);
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background-color: var(--color-ivory);
+  animation: wys-intro-overlay-out 0.65s var(--ease-editorial) 3.2s both;
+}
+
+[data-wys-intro="off"] .wys-intro-overlay {
+  display: none;
+}
+
+@keyframes wys-intro-overlay-out {
+  from {
+    opacity: 1;
+    visibility: visible;
+  }
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* Square emblem canvas; ring, lettering, mic and pen are layered inside. */
+.wys-intro-emblem {
+  position: relative;
+  width: var(--wys-emblem);
+  height: var(--wys-emblem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wys-intro-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.wys-intro-ring-group {
+  animation: wys-intro-fade 0.85s var(--ease-editorial) 0.85s both;
+}
+
+/* The unified wordmark — one element, one animation. */
+.wys-intro-text {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: var(--font-serif);
+  font-size: calc(var(--wys-emblem) * 0.155);
+  line-height: 1.04;
+  letter-spacing: -0.01em;
+  color: var(--color-charcoal);
+  text-align: center;
+  animation: wys-intro-rise 0.85s var(--ease-editorial) 0.15s both;
+}
+
+.wys-intro-whats,
+.wys-intro-story {
+  display: block;
+}
+
+.wys-intro-you {
+  display: block;
+  color: var(--color-gold-deep);
+  font-style: italic;
+  font-size: 0.72em;
+  margin: 0.06em 0 0.1em;
+}
+
+.wys-intro-story {
+  position: relative;
+  display: inline-block;
+}
+
+@keyframes wys-intro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wys-intro-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Vintage microphone — upper right of the lettering, inside the ring. */
+.wys-intro-mic {
+  position: absolute;
+  z-index: 3;
+  top: 11%;
+  right: 5%;
+  width: calc(var(--wys-emblem) * 0.185);
+  height: auto;
+  animation: wys-intro-mic-in 0.85s var(--ease-editorial) 0.85s both;
+}
+
+@keyframes wys-intro-mic-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Underline beneath "Story" — stroke drawn left → right. */
+.wys-intro-underline {
+  position: absolute;
+  left: -3%;
+  bottom: -0.17em;
+  width: 106%;
+  height: 0.075em;
+  overflow: visible;
+}
+
+.wys-intro-stroke {
+  fill: none;
+  stroke: var(--color-gold);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: wys-intro-draw 1.05s var(--ease-editorial) 1.55s both;
+}
+
+@keyframes wys-intro-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Fountain pen — rides a track the width of "Story"; its nib tip sits at
+   the track's origin (translateX(-100%)), so when the track has moved one
+   word width, the nib rests exactly where the underline ends. */
+.wys-intro-pen-track {
+  position: absolute;
+  left: 0;
+  bottom: -0.42em;
+  width: 100%;
+  height: 0.56em;
+  animation: wys-intro-pen-glide 1.05s var(--ease-editorial) 1.55s both;
+}
+
+.wys-intro-pen {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: auto;
+  transform: translateX(-100%);
+}
+
+@keyframes wys-intro-pen-glide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Heartbeat waveform at the base of the ring. */
+.wys-intro-heartbeat {
+  animation: wys-intro-fade 0.5s var(--ease-editorial) 2.6s both;
+}
+
+/* ============================================================
    Component styles
    ============================================================ */
 
@@ -437,5 +642,10 @@
   .anim-in {
     opacity: 1 !important;
     transform: none !important;
+  }
+
+  /* Skip the intro entirely — homepage reachable immediately. */
+  .wys-intro-overlay {
+    display: none !important;
   }
 }

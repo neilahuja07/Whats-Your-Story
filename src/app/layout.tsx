@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Playfair_Display, Inter } from "next/font/google";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { IntroOverlay } from "@/components/motion/IntroOverlay";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -63,7 +64,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${playfair.variable} ${inter.variable}`}>
+    // suppressHydrationWarning: the intro's pre-paint script sets
+    // data-wys-intro on <html> before React hydrates (session/admin gating).
+    // This is the documented pattern for attribute-modifying inline scripts;
+    // it only silences the attribute diff on <html> itself.
+    <html
+      lang="en"
+      className={`${playfair.variable} ${inter.variable}`}
+      suppressHydrationWarning
+    >
       <body className="flex min-h-screen flex-col">
         <a
           href="#main"
@@ -72,6 +81,7 @@ export default function RootLayout({
           Skip to content
         </a>
         <Navbar />
+        <IntroOverlay />
         <main id="main" className="flex-1">
           {children}
         </main>

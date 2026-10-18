@@ -9,24 +9,29 @@ interface FormErrors {
   [key: string]: string;
 }
 
-const MAX_STORY_CHARS = 40000;
+const MAX_INTRO_WORDS = 150;
+
+function countWords(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).length;
+}
 
 /**
- * SubmissionForm — validated client-side for instant feedback, then
- * validated again server-side before anything is stored.
+ * SubmissionForm — the public contribution form. Exactly six required fields
+ * and two mandatory permission confirmations, validated client-side for
+ * instant feedback and again server-side before anything is stored.
  */
-export function SubmissionForm({
-  categories,
-  consentText,
-}: {
-  categories: { id: string; name: string }[];
-  consentText: string;
-}) {
+export function SubmissionForm() {
   const router = useRouter();
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [introduction, setIntroduction] = useState("");
+
+  const wordCount = countWords(introduction);
+  const overLimit = wordCount > MAX_INTRO_WORDS;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -39,20 +44,35 @@ export function SubmissionForm({
     const nextErrors: FormErrors = {};
     const name = String(fd.get("submitterName") || "").trim();
     const email = String(fd.get("email") || "").trim();
-    const title = String(fd.get("storyTitle") || "").trim();
-    const content = String(fd.get("storyContent") || "").trim();
-    const consent = fd.get("consent");
+    const contactNumber = String(fd.get("contactNumber") || "").trim();
+    const linkedinProfileUrl = String(fd.get("linkedinProfileUrl") || "").trim();
+    const city = String(fd.get("city") || "").trim();
+    const intro = String(fd.get("introduction") || "").trim();
+    const consentPublish = fd.get("consentPublish") === "on";
+    const consentAuthorship = fd.get("consentAuthorship") === "on";
 
-    if (!name) nextErrors.submitterName = "Please tell us your name.";
+    if (!name) nextErrors.submitterName = "Please tell us your full name.";
     if (!email) nextErrors.email = "Please add your email address.";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))
       nextErrors.email = "That email address doesn't look right.";
-    if (!title) nextErrors.storyTitle = "Please give your story a title.";
-    if (!content)
-      nextErrors.storyContent = "Please write your story — even a few lines to start.";
-    else if (content.length > MAX_STORY_CHARS)
-      nextErrors.storyContent = `Please keep your story under ${MAX_STORY_CHARS.toLocaleString()} characters.`;
-    if (!consent) nextErrors.consent = "Please confirm you have the right to submit this story.";
+    if (!contactNumber) nextErrors.contactNumber = "Please add a contact number.";
+    if (!linkedinProfileUrl)
+      nextErrors.linkedinProfileUrl = "Please add your LinkedIn profile URL.";
+    else if (!/^https:\/\/(www\.)?linkedin\.com\//.test(linkedinProfileUrl))
+      nextErrors.linkedinProfileUrl =
+        "Please enter a valid LinkedIn profile URL (https://www.linkedin.com/in/…).";
+    if (!city) nextErrors.city = "Please add your city or state.";
+    if (!intro)
+      nextErrors.introduction =
+        "Please write a brief introduction about yourself.";
+    else if (countWords(intro) > MAX_INTRO_WORDS)
+      nextErrors.introduction = `Please keep your introduction to ${MAX_INTRO_WORDS} words or fewer (currently ${countWords(intro)}).`;
+    if (!consentPublish)
+      nextErrors.consentPublish =
+        "Please confirm the permission to use your name so we can review your entry.";
+    if (!consentAuthorship)
+      nextErrors.consentAuthorship =
+        "Please confirm that this is your experience or that you have permission to share it.";
 
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
@@ -69,16 +89,12 @@ export function SubmissionForm({
       const payload = {
         submitterName: name,
         email,
-        storyTitle: title,
-        storyContent: content,
-        introduction: String(fd.get("introduction") || "").trim(),
-        categoryId: String(fd.get("categoryId") || "") || null,
-        city: String(fd.get("city") || "").trim(),
-        linkedinProfileUrl: String(fd.get("linkedinProfileUrl") || "").trim(),
-        additionalMessage: String(fd.get("additionalMessage") || "").trim(),
-        allowNameDisplay: fd.get("allowNameDisplay") === "on",
-        allowPortraitDisplay: fd.get("allowPortraitDisplay") === "on",
-        consent: true,
+        contactNumber,
+        linkedinProfileUrl,
+        city,
+        introduction: intro,
+        consentPublish: true,
+        consentAuthorship: true,
       };
 
       const res = await fetch("/api/submissions", {
@@ -99,7 +115,7 @@ export function SubmissionForm({
         } else {
           setServerError(
             data?.error ||
-              "Something went wrong while sending your story. Please try again in a moment.",
+              "Something went wrong while sending your entry. Please try again in a moment.",
           );
         }
         return;
@@ -127,15 +143,17 @@ export function SubmissionForm({
       >
         <CheckCircle2 className="mx-auto h-12 w-12 text-gold" aria-hidden="true" />
         <h2 className="mt-6 font-serif text-h3 text-charcoal">
-          Thank you for trusting us with your story.
+          Thank you for your interest!
         </h2>
         <p className="mx-auto mt-4 max-w-md text-[1rem] leading-relaxed text-muted">
-          Our editorial team will review your submission and get in touch if it
-          is selected for publication.
+          Your entry has reached our editorial team. We&apos;ll review your
+          introduction and contact you if we&apos;d like to explore your story
+          further.
         </p>
         <p className="mx-auto mt-6 max-w-md text-[0.85rem] italic leading-relaxed text-muted">
-          Submitting a story does not guarantee publication. Nothing will be
-          published without your explicit permission.
+          You don&apos;t need to send us your complete story yet. If your
+          experience is a good fit, we&apos;ll get in touch to discuss the next
+          steps.
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <button
@@ -143,7 +161,7 @@ export function SubmissionForm({
             onClick={() => window.location.reload()}
             className="border border-charcoal bg-charcoal px-6 py-3 font-sans text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-ivory transition-colors hover:bg-gold-deep hover:border-gold-deep"
           >
-            Submit another story
+            Submit another entry
           </button>
           <Link
             href="/stories"
@@ -177,6 +195,7 @@ export function SubmissionForm({
             required
             error={errors.submitterName}
             autoComplete="name"
+            placeholder="Your full name"
           />
           <Field
             label="Email address"
@@ -185,105 +204,94 @@ export function SubmissionForm({
             required
             error={errors.email}
             autoComplete="email"
+            placeholder="you@example.com"
             hint="We only use this to contact you about your story."
           />
         </div>
 
-        {/* Title */}
-        <Field
-          label="Story title"
-          name="storyTitle"
-          required
-          error={errors.storyTitle}
-          hint="A working title is fine — we can refine it together."
-        />
-
-        {/* Category + city */}
+        {/* Contact number + LinkedIn */}
         <div className="grid gap-6 sm:grid-cols-2">
-          <div>
-            <label
-              htmlFor="categoryId"
-              className="block font-sans text-[0.78rem] font-semibold uppercase tracking-[0.12em] text-charcoal"
-            >
-              Category <span className="normal-case tracking-normal text-muted">(optional)</span>
-            </label>
-            <select
-              id="categoryId"
-              name="categoryId"
-              className="mt-2 w-full border border-line bg-paper px-4 py-3 text-[0.95rem] text-charcoal focus:border-gold focus:outline-none"
-              defaultValue=""
-            >
-              <option value="">Choose a category…</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
           <Field
-            label="City or location"
-            name="city"
-            error={undefined}
-            hint="Optional — only share what you're comfortable with."
-          />
-        </div>
-
-        {/* Introduction */}
-        <Field
-          label="A short introduction about you"
-          name="introduction"
-          as="textarea"
-          rows={3}
-          hint="Optional — a sentence or two about who you are."
-        />
-
-        {/* Story */}
-        <div>
-          <label
-            htmlFor="storyContent"
-            className="block font-sans text-[0.78rem] font-semibold uppercase tracking-[0.12em] text-charcoal"
-          >
-            Your story <span className="text-gold">*</span>
-          </label>
-          <textarea
-            id="storyContent"
-            name="storyContent"
-            rows={14}
+            label="Contact number"
+            name="contactNumber"
+            type="tel"
             required
-            aria-invalid={errors.storyContent ? "true" : undefined}
-            aria-describedby={errors.storyContent ? "storyContent-error" : "storyContent-hint"}
-            className={`mt-2 w-full border bg-paper px-4 py-3 text-[1rem] leading-relaxed text-charcoal focus:outline-none ${
-              errors.storyContent ? "border-red-400" : "border-line focus:border-gold"
-            }`}
-            placeholder="Take as much space as you need. Write as you would tell it to a friend."
+            error={errors.contactNumber}
+            autoComplete="tel"
+            placeholder="+44 20 7946 0958"
+            hint="Include the country code for international numbers."
           />
-          {errors.storyContent ? (
-            <p id="storyContent-error" className="mt-2 text-[0.82rem] text-red-700">
-              {errors.storyContent}
-            </p>
-          ) : (
-            <p id="storyContent-hint" className="mt-2 text-[0.82rem] text-muted">
-              There is no word limit. Your story is reviewed by a human editor.
-            </p>
-          )}
-        </div>
-
-        {/* LinkedIn + message */}
-        <div className="grid gap-6 sm:grid-cols-2">
           <Field
             label="LinkedIn profile URL"
             name="linkedinProfileUrl"
             type="url"
-            hint="Optional."
+            required
+            error={errors.linkedinProfileUrl}
+            placeholder="https://www.linkedin.com/in/your-name"
           />
-          <Field
-            label="Additional message to the editorial team"
-            name="additionalMessage"
-            as="textarea"
-            rows={3}
-            hint="Optional — anything you'd like us to know."
+        </div>
+
+        {/* City / state */}
+        <Field
+          label="City / State"
+          name="city"
+          required
+          error={errors.city}
+          autoComplete="address-level2"
+          placeholder="e.g. Bengaluru, India"
+        />
+
+        {/* Introduction */}
+        <div>
+          <label
+            htmlFor="introduction"
+            className="block font-sans text-[0.78rem] font-semibold uppercase tracking-[0.12em] text-charcoal"
+          >
+            A brief introduction about you and your story{" "}
+            <span className="text-gold">*</span>
+          </label>
+          <textarea
+            id="introduction"
+            name="introduction"
+            rows={8}
+            required
+            value={introduction}
+            onChange={(e) => setIntroduction(e.target.value)}
+            aria-invalid={errors.introduction || overLimit ? "true" : undefined}
+            aria-describedby={
+              errors.introduction || overLimit
+                ? "introduction-error introduction-counter"
+                : "introduction-hint introduction-counter"
+            }
+            placeholder="Tell us a little about yourself, your background, or an experience that has shaped you. What would you like people to know about your journey?"
+            className={`mt-2 w-full border bg-paper px-4 py-3 text-[1rem] leading-relaxed text-charcoal focus:outline-none ${
+              errors.introduction || overLimit
+                ? "border-red-400"
+                : "border-line focus:border-gold"
+            }`}
           />
+          <p id="introduction-hint" className="mt-2 text-[0.82rem] text-muted">
+            A few sentences are enough. You don&apos;t need to write your
+            complete story yet.
+          </p>
+          <div className="mt-2 flex items-start justify-between gap-4">
+            {errors.introduction || overLimit ? (
+              <p id="introduction-error" className="text-[0.82rem] text-red-700">
+                {errors.introduction ||
+                  `Please keep your introduction to ${MAX_INTRO_WORDS} words or fewer (currently ${wordCount}).`}
+              </p>
+            ) : (
+              <span aria-hidden="true" />
+            )}
+            <p
+              className={`shrink-0 text-[0.82rem] tabular-nums ${
+                overLimit ? "font-semibold text-red-700" : "text-muted"
+              }`}
+              aria-live="polite"
+            >
+              {wordCount} / {MAX_INTRO_WORDS} words
+            </p>
+          </div>
         </div>
 
         {/* Permissions */}
@@ -293,37 +301,33 @@ export function SubmissionForm({
           </legend>
           <div className="space-y-4">
             <Checkbox
-              name="allowNameDisplay"
-              label="You may display my name alongside my story if it is published."
+              name="consentPublish"
+              label="I agree to the use of my name and, if separately confirmed, my photograph if my story is published."
+              required
+              error={errors.consentPublish}
             />
             <Checkbox
-              name="allowPortraitDisplay"
-              label="You may display a photograph of me alongside my story, if I provide one and confirm it separately."
+              name="consentAuthorship"
+              label="I confirm that this is my experience, or I have permission to share it, and agree to its editorial review."
+              required
+              error={errors.consentAuthorship}
             />
-            <div className="border-t border-line pt-4">
-              <Checkbox
-                name="consent"
-                label={consentText}
-                required
-                error={errors.consent}
-              />
-            </div>
           </div>
         </fieldset>
 
         <div className="flex items-center gap-4">
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || overLimit}
             className="inline-flex items-center gap-2 border border-charcoal bg-charcoal px-8 py-4 font-sans text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-ivory transition-colors hover:bg-gold-deep hover:border-gold-deep disabled:opacity-60"
           >
             {submitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                Sending your story…
+                Sending your interest…
               </>
             ) : (
-              "Submit my story"
+              "Share your story"
             )}
           </button>
           <p className="text-[0.82rem] text-muted">
@@ -344,8 +348,7 @@ function Field({
   required = false,
   error,
   hint,
-  as = "input",
-  rows = 4,
+  placeholder,
   autoComplete,
 }: {
   label: string;
@@ -354,8 +357,7 @@ function Field({
   required?: boolean;
   error?: string | undefined;
   hint?: string;
-  as?: "input" | "textarea";
-  rows?: number;
+  placeholder?: string;
   autoComplete?: string;
 }) {
   const id = name;
@@ -372,27 +374,17 @@ function Field({
       >
         {label} {required && <span className="text-gold">*</span>}
       </label>
-      {as === "textarea" ? (
-        <textarea
-          id={id}
-          name={name}
-          rows={rows}
-          aria-invalid={error ? "true" : undefined}
-          aria-describedby={describedBy}
-          className={className}
-        />
-      ) : (
-        <input
-          id={id}
-          name={name}
-          type={type}
-          required={required}
-          autoComplete={autoComplete}
-          aria-invalid={error ? "true" : undefined}
-          aria-describedby={describedBy}
-          className={className}
-        />
-      )}
+      <input
+        id={id}
+        name={name}
+        type={type}
+        required={required}
+        autoComplete={autoComplete}
+        placeholder={placeholder}
+        aria-invalid={error ? "true" : undefined}
+        aria-describedby={describedBy}
+        className={className}
+      />
       {error ? (
         <p id={`${id}-error`} className="mt-2 text-[0.82rem] text-red-700">
           {error}
@@ -433,7 +425,7 @@ function Checkbox({
         </span>
       </label>
       {error && (
-        <p id={`${name}-error`} className="mt-2 text-[0.82rem] text-red-700">
+        <p id={`${name}-error`} className="mt-2 pl-7 text-[0.82rem] text-red-700">
           {error}
         </p>
       )}
