@@ -1,0 +1,441 @@
+@import "tailwindcss";
+
+/* ============================================================
+   What's Your Story — design system
+   Premium editorial magazine aesthetic.
+   ============================================================ */
+
+@theme {
+  /* Colour */
+  --color-ivory: #faf8f3;
+  --color-paper: #ffffff;
+  --color-beige: #f0eae0;
+  --color-beige-deep: #e6dccb;
+  --color-charcoal: #252525;
+  --color-charcoal-soft: #3a3a3a;
+  --color-gold: #b6955b;
+  --color-gold-deep: #97793f;
+  --color-gold-light: #f3ecdd;
+  --color-muted: #777777;
+  --color-line: #e6e1d6;
+
+  /* Typography */
+  --font-serif: var(--font-playfair), "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Type scale
+     Display sizes are FLUID so editorial headings grow with the viewport
+     instead of shrinking at the `sm` breakpoint. Previously these were fixed
+     values with per-element `sm:text-[...]` overrides that inverted the scale
+     (52px on mobile collapsing to 41.6px on desktop, and a 72px hero on a
+     375px phone). clamp() keeps the same endpoints while scaling smoothly. */
+  --text-display: clamp(2.5rem, 1.5rem + 4vw, 4.5rem);
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -0.02em;
+  --text-display-sm: clamp(2rem, 1.6rem + 2.2vw, 3.25rem);
+  --text-display-sm--line-height: 1.08;
+  --text-display-sm--letter-spacing: -0.015em;
+  --text-h1: 2.75rem;
+  --text-h1--line-height: 1.15;
+  /* Section headings scale down on small screens so they stay clearly
+     subordinate to the (fluid) page h1 instead of matching it. */
+  --text-h2: clamp(1.6rem, 1.3rem + 1vw, 2.125rem);
+  --text-h2--line-height: 1.2;
+  --text-h3: 1.5rem;
+  --text-h3--line-height: 1.3;
+  --text-h4: 1.25rem;
+  --text-h4--line-height: 1.35;
+
+  /* Spacing rhythm */
+  --spacing-section: 7rem;
+
+  /* Motion */
+  --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Base ------------------------------------------------------------------ */
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-ivory);
+    color: var(--color-charcoal);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5 {
+    font-family: var(--font-serif);
+    color: var(--color-charcoal);
+    font-weight: 500;
+  }
+
+  ::selection {
+    background-color: var(--color-gold);
+    color: #fff;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 3px;
+    border-radius: 1px;
+  }
+
+  input, textarea, select, button {
+    font-family: inherit;
+  }
+}
+
+/* Utilities -------------------------------------------------------------- */
+
+@utility eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-gold-deep);
+}
+
+@utility admin-label {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-charcoal);
+}
+
+/* Long-form story body typography */
+@utility prose-story {
+  font-size: 1.125rem;
+  line-height: 1.85;
+  color: var(--color-charcoal-soft);
+
+  & p {
+    margin-bottom: 1.6rem;
+  }
+
+  & h2 {
+    font-family: var(--font-serif);
+    font-size: 1.75rem;
+    line-height: 1.3;
+    margin-top: 2.75rem;
+    margin-bottom: 1rem;
+    color: var(--color-charcoal);
+  }
+
+  & h3 {
+    font-family: var(--font-serif);
+    font-size: 1.375rem;
+    margin-top: 2.25rem;
+    margin-bottom: 0.75rem;
+    color: var(--color-charcoal);
+  }
+
+  & a {
+    color: var(--color-gold-deep);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transition: color 0.2s var(--ease-editorial);
+
+    &:hover {
+      color: var(--color-charcoal);
+    }
+  }
+
+  & strong {
+    color: var(--color-charcoal);
+    font-weight: 600;
+  }
+
+  & ul, & ol {
+    margin-bottom: 1.6rem;
+    padding-left: 1.5rem;
+  }
+
+  & ul {
+    list-style: disc;
+  }
+
+  & ol {
+    list-style: decimal;
+  }
+
+  & li {
+    margin-bottom: 0.5rem;
+  }
+
+  & blockquote {
+    margin: 2.25rem 0;
+    padding-left: 1.5rem;
+    border-left: 2px solid var(--color-gold);
+    font-family: var(--font-serif);
+    font-size: 1.375rem;
+    font-style: italic;
+    line-height: 1.6;
+    color: var(--color-charcoal);
+  }
+}
+
+@utility rule-gold {
+  height: 2px;
+  width: 3rem;
+  background-color: var(--color-gold);
+}
+
+/* Subtle fade-up used on scroll-reveal sections */
+@utility animate-fade-up {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.7s var(--ease-editorial),
+    transform 0.7s var(--ease-editorial);
+}
+
+@utility fade-up-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ============================================================
+   Motion — restrained editorial entrance + reveal choreography
+   Pure CSS so there is no hydration cost. Every animation ends
+   at opacity 1 (animation-fill-mode: both) so content is never
+   trapped invisible if JS never runs.
+   ============================================================ */
+
+@keyframes wys-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wys-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes wys-zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes wys-rule-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Entrance utilities. Duration is fixed; the delay is set inline so
+   sections can stagger without a class explosion. */
+@utility anim-in {
+  animation-duration: 0.75s;
+  animation-timing-function: var(--ease-editorial);
+  animation-fill-mode: both;
+}
+
+@utility anim-fade-up {
+  animation-name: wys-fade-up;
+}
+
+@utility anim-fade-in {
+  animation-name: wys-fade-in;
+}
+
+@utility anim-zoom-in {
+  animation-name: wys-zoom-in;
+}
+
+@utility anim-rule-in {
+  animation-name: wys-rule-in;
+  transform-origin: left center;
+}
+
+/* Scroll reveal: starts hidden, the Reveal component toggles this on. */
+@utility reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.8s var(--ease-editorial),
+    transform 0.8s var(--ease-editorial);
+  will-change: opacity, transform;
+}
+
+@utility reveal-shown {
+  opacity: 1;
+  transform: none;
+}
+
+/* ============================================================
+   Component styles
+   ============================================================ */
+
+/* Animated navigation underline: grows from the centre on hover,
+   and is simply present when the link is active. */
+@utility nav-link {
+  position: relative;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: color 0.3s var(--ease-editorial);
+
+  &::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 0.15rem;
+    height: 1px;
+    width: 0;
+    background-color: var(--color-gold);
+    transform: translateX(-50%);
+    transition:
+      width 0.35s var(--ease-editorial),
+      opacity 0.35s var(--ease-editorial);
+    opacity: 0;
+  }
+
+  &:hover::after,
+  &:focus-visible::after,
+  &[aria-current="page"]::after {
+    width: 100%;
+    opacity: 1;
+  }
+}
+
+/* Text link with a left-to-right underline sweep. */
+@utility link-sweep {
+  background-image: linear-gradient(var(--color-gold), var(--color-gold));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 1px;
+  transition:
+    background-size 0.4s var(--ease-editorial),
+    color 0.3s var(--ease-editorial);
+
+  &:hover,
+  &:focus-visible {
+    background-size: 100% 1px;
+  }
+}
+
+/* Image zoom inside a fixed overflow frame. Applies to any child image
+   so the crop never changes shape while zooming. */
+@utility zoom-frame {
+  & img,
+  & span[data-zoom] {
+    transition: transform 0.9s var(--ease-editorial);
+  }
+
+  &:hover img,
+  &:hover span[data-zoom],
+  &:focus-within img {
+    transform: scale(1.045);
+  }
+}
+
+/* Back-to-top control. */
+@utility back-to-top {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.75rem;
+  width: 2.75rem;
+  border: 1px solid var(--color-line);
+  background-color: var(--color-paper);
+  color: var(--color-charcoal);
+  box-shadow: 0 6px 20px rgb(37 37 37 / 0.08);
+  transition:
+    opacity 0.35s var(--ease-editorial),
+    transform 0.35s var(--ease-editorial),
+    border-color 0.3s var(--ease-editorial),
+    color 0.3s var(--ease-editorial);
+
+  &:hover {
+    border-color: var(--color-gold);
+    color: var(--color-gold-deep);
+    transform: translateY(-2px);
+  }
+}
+
+/* Reading progress bar (story pages). */
+@utility reading-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  height: 2px;
+  width: 100%;
+  transform-origin: left center;
+  background-color: var(--color-gold);
+}
+
+/* Editorial divider with a centred diamond. */
+@utility rule-diamond {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--color-gold);
+
+  &::before,
+  &::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background-color: var(--color-line);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  /* Never leave content invisible when motion is reduced. */
+  .reveal,
+  .anim-in {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
