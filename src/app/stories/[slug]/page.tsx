@@ -269,7 +269,7 @@ export default async function StoryPage({
                   story={s}
                   showDate
                   revealIndex={i}
-                  aspect={i % 2 === 0 ? "aspect-[4/5]" : "aspect-square"}
+                  aspect="aspect-[4/5]"
                 />
               ))}
             </div>

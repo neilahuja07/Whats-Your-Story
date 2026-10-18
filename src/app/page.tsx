@@ -47,8 +47,9 @@ export default async function HomePage() {
   const storyCount = latest.total;
   const hasStories = storyCount > 0;
 
-  /** Alternating card proportions so a row of three never reads as a template. */
-  const FEATURED_ASPECTS = ["aspect-[4/5]", "aspect-square", "aspect-[4/5]"];
+  /** One fixed 4:5 frame shared by every featured card, so the row reads as a
+   *  set with identical image heights regardless of source photo dimensions. */
+  const FEATURED_ASPECT = "aspect-[4/5]";
 
   return (
     <>
@@ -141,7 +142,7 @@ export default async function HomePage() {
                   story={story}
                   showDate
                   priority={i < 3}
-                  aspect={FEATURED_ASPECTS[i % FEATURED_ASPECTS.length]}
+                  aspect={FEATURED_ASPECT}
                   revealIndex={i}
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                 />

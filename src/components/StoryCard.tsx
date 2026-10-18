@@ -13,8 +13,9 @@ import type { Story } from "@/lib/types";
  * in a gold accent rule. Cards reveal themselves with a small stagger when
  * they scroll into view.
  *
- * `aspect` lets collections break the grid up with varied card proportions
- * instead of making every card identical.
+ * `aspect` sets the image frame's proportion. Every card in a row must share
+ * one value so heights stay identical; collections pass a single constant
+ * (e.g. "aspect-[4/5]") rather than alternating ratios.
  */
 export function StoryCard({
   story,
@@ -48,7 +49,7 @@ export function StoryCard({
       >
         <article className="flex h-full flex-col">
           <div
-            className={`zoom-frame relative overflow-hidden bg-beige ${aspect}`}
+            className={`zoom-frame relative w-full overflow-hidden bg-beige ${aspect}`}
           >
             <Portrait
               src={story.portraitUrl}

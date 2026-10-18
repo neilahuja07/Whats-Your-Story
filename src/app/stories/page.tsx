@@ -230,7 +230,7 @@ export default async function StoriesPage({
                   key={story.id}
                   story={story}
                   showDate
-                  aspect={i % 2 === 0 ? "aspect-[16/10]" : "aspect-[16/10]"}
+                  aspect="aspect-[16/10]"
                   revealIndex={i}
                   excerptLines={2}
                 />
