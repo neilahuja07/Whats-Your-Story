@@ -7,6 +7,7 @@ import { BackToTop } from "@/components/motion/BackToTop";
 import { Linkedin } from "lucide-react";
 import { init } from "@/lib/bootstrap";
 import { getFounderProfile } from "@/lib/repositories/founder";
+import { RichText } from "@/components/RichText";
 
 export const metadata: Metadata = {
   title: "The Founder",
@@ -37,19 +38,6 @@ function LinkedInButton() {
       Connect on LinkedIn
       <Linkedin className="h-4 w-4" aria-hidden="true" />
     </ButtonLink>
-  );
-}
-
-/** Split long-form text into paragraphs, guarding against empty renders. */
-function Paragraphs({ text, className }: { text: string; className: string }) {
-  const paras = text.split("\n\n").filter((p) => p.trim().length > 0);
-  if (paras.length === 0) return null;
-  return (
-    <div className={className}>
-      {paras.map((p, i) => (
-        <p key={i}>{p}</p>
-      ))}
-    </div>
   );
 }
 
@@ -167,8 +155,8 @@ export default async function FounderPage() {
             {/* Biography + motivation + vision */}
             <div className="md:col-span-7">
               <Reveal>
-                <Paragraphs
-                  text={founder.biography}
+                <RichText
+                  html={founder.biography}
                   className="max-w-[640px] space-y-5 text-[1.05rem] leading-[1.85] text-charcoal-soft"
                 />
               </Reveal>
@@ -180,8 +168,8 @@ export default async function FounderPage() {
                     Why This Platform Exists
                   </h2>
                   <span aria-hidden="true" className="rule-gold mt-4" />
-                  <Paragraphs
-                    text={founder.motivation}
+                  <RichText
+                    html={founder.motivation}
                     className="mt-6 max-w-[640px] space-y-5 text-[1.02rem] leading-[1.85] text-charcoal-soft"
                   />
                 </Reveal>
@@ -190,9 +178,12 @@ export default async function FounderPage() {
               {founder.vision && (
                 <Reveal delay={160} className="mt-12 border-l-2 border-gold bg-beige/40 p-8">
                   <Eyebrow>The founder&apos;s vision</Eyebrow>
-                  <p className="mt-4 font-serif text-[1.4rem] italic leading-relaxed text-charcoal">
-                    {founder.vision}
-                  </p>
+                  {/* A div, not a <p>: rich paragraphs inside a <p> would be
+                      invalid nested HTML that browsers auto-close. */}
+                  <RichText
+                    html={founder.vision}
+                    className="mt-4 space-y-3 font-serif text-[1.4rem] italic leading-relaxed text-charcoal"
+                  />
                 </Reveal>
               )}
 

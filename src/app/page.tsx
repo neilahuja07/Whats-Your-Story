@@ -20,6 +20,21 @@ import {
 import { listHomeCollagePortraits } from "@/lib/repositories/collagePortraits";
 import { getFounderProfile } from "@/lib/repositories/founder";
 import { getSiteContentValue } from "@/lib/repositories/siteContent";
+import { sanitizePlainText } from "@/lib/sanitize";
+
+/**
+ * Plain-text teaser for the homepage founder block. The motivation /
+ * biography fields store rich HTML from the admin editor, so the markup is
+ * stripped first (never shown as literal tags) and the result is cut on a
+ * word boundary so the card never ends mid-word.
+ */
+function founderTeaser(text: string, max = 280): string {
+  const plain = sanitizePlainText(text, 2000);
+  if (plain.length <= max) return plain;
+  const cut = plain.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > max / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -285,9 +300,7 @@ export default async function HomePage() {
                   </p>
                 )}
                 <p className="mt-5 max-w-2xl text-[1.02rem] leading-relaxed text-muted">
-                  {founder.motivation ||
-                    founder.biography.split("\n\n")[0] ||
-                    ""}
+                  {founderTeaser(founder.motivation || founder.biography)}
                 </p>
               </>
             )}
