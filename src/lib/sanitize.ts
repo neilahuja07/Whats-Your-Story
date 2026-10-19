@@ -52,10 +52,47 @@ export function sanitizeRichText(input: string): string {
   });
 }
 
+/**
+ * Matches real tag shapes only ("<p>", "</a>", "<a href=…>"), never
+ * comparisons like "a < b > c" (which need "<" immediately followed by a
+ * letter). Non-text elements (script/style/…) are deliberately excluded so
+ * sanitize-html still sees them and discards their *contents* as before.
+ */
+const TAG_BOUNDARY =
+  /<\/?(?!script\b|style\b|textarea\b|option\b)[a-z][a-z0-9]*\b[^>]*>/gi;
+
+/** Undo the entities sanitize-html writes when serialising text nodes. */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&"); // last: "&amp;lt;" must become "&lt;", not "<"
+}
+
+/**
+ * Shared plain-text conversion for every field stored and rendered as text.
+ *
+ * Tag boundaries become spaces first so adjacent blocks don't glue their
+ * text together after stripping ("</p><p>" → "Story Every", never
+ * "StoryEvery"), and the serialisation entities are decoded again: callers
+ * render these values through React, which escapes text on its own — a
+ * literal "Tom & Jerry" must not end up displaying as "Tom &amp; Jerry".
+ */
+function toPlainText(input: unknown): string {
+  const raw = typeof input === "string" ? input : "";
+  return decodeEntities(
+    sanitizeHtml(raw.replace(TAG_BOUNDARY, " "), {
+      allowedTags: [],
+      allowedAttributes: {},
+    }),
+  );
+}
+
 /** Plain-text fields: strip tags, collapse whitespace, cap length. */
 export function sanitizePlainText(input: unknown, maxLength = 500): string {
-  const raw = typeof input === "string" ? input : "";
-  return sanitizeHtml(raw, { allowedTags: [], allowedAttributes: {} })
+  return toPlainText(input)
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, maxLength);
@@ -63,8 +100,7 @@ export function sanitizePlainText(input: unknown, maxLength = 500): string {
 
 /** Longer plain text (excerpts, bios): preserve paragraph breaks. */
 export function sanitizeMultilineText(input: unknown, maxLength = 5000): string {
-  const raw = typeof input === "string" ? input : "";
-  return sanitizeHtml(raw, { allowedTags: [], allowedAttributes: {} })
+  return toPlainText(input)
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
@@ -73,7 +109,7 @@ export function sanitizeMultilineText(input: unknown, maxLength = 5000): string 
 
 /** Strip tags and return a plain-text preview (for meta descriptions). */
 export function richTextToPlain(input: string, maxLength = 160): string {
-  return sanitizeHtml(input, { allowedTags: [], allowedAttributes: {} })
+  return toPlainText(input)
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, maxLength);

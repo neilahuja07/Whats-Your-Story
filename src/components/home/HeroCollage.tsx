@@ -35,8 +35,28 @@ function tileSizes(large: boolean): string {
     : "(max-width: 640px) 21vw, (max-width: 768px) 11vw, (max-width: 1280px) 9vw, 5vw";
 }
 
+/**
+ * Small walls (fewer photographs than one full pattern cycle) get equal
+ * 4:5 tiles instead of the mosaic: the fixed span pattern assumes a full
+ * wall and would leave large empty holes around a handful of portraits.
+ */
+function smallWallClass(count: number): string {
+  const base = "grid gap-2 sm:gap-3";
+  switch (count) {
+    case 1:
+      return `${base} mx-auto grid-cols-1 max-w-[340px]`;
+    case 3:
+      // Two tiles, then a full-width third on phones; three across from md.
+      return `${base} grid-cols-2 md:grid-cols-3`;
+    default:
+      return `${base} grid-cols-2 md:grid-cols-4`;
+  }
+}
+
 export function HeroCollage({ portraits }: { portraits: CollagePortrait[] }) {
   if (portraits.length === 0) return <HeroTypographic />;
+  // The span pattern needs a critical mass of tiles to avoid interior holes.
+  const mosaic = portraits.length >= 5;
 
   return (
     <div className="relative">
@@ -47,22 +67,37 @@ export function HeroCollage({ portraits }: { portraits: CollagePortrait[] }) {
       />
 
       <div
-        className="grid auto-rows-[52px] grid-flow-dense grid-cols-4 gap-2 sm:auto-rows-[58px] sm:grid-cols-6 md:auto-rows-[46px] md:grid-cols-3 lg:auto-rows-[46px] lg:grid-cols-4 xl:auto-rows-[42px] xl:grid-cols-6"
+        className={
+          mosaic
+            ? "grid auto-rows-[52px] grid-flow-dense grid-cols-4 gap-2 sm:auto-rows-[58px] sm:grid-cols-6 md:auto-rows-[46px] md:grid-cols-3 lg:auto-rows-[46px] lg:grid-cols-4 xl:auto-rows-[42px] xl:grid-cols-6"
+            : smallWallClass(portraits.length)
+        }
         aria-hidden="true"
       >
         {portraits.map((p, i) => {
           const { cls, large } = tileClass(i);
+          const lastOdd =
+            !mosaic && portraits.length % 2 === 1 && i === portraits.length - 1;
           return (
             <figure
               key={p.id}
-              className={`zoom-frame anim-in anim-fade-up relative overflow-hidden bg-beige ${cls}`}
+              className={`zoom-frame anim-in anim-fade-up relative overflow-hidden bg-beige ${
+                mosaic ? cls : "aspect-[4/5]"
+              }${
+                // Full-width last tile on phones only when the count is odd.
+                lastOdd ? " col-span-2 md:col-span-1" : ""
+              }`}
               style={{ animationDelay: `${180 + Math.min(i, 10) * 50}ms` }}
             >
               <Image
                 src={p.url}
                 alt=""
                 fill
-                sizes={tileSizes(large)}
+                sizes={
+                  mosaic
+                    ? tileSizes(large)
+                    : "(max-width: 768px) 92vw, 23vw"
+                }
                 className="object-cover object-top"
                 priority={i < 4}
               />

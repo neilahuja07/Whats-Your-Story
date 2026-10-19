@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Linkedin, Mail, ArrowUpRight } from "lucide-react";
-import { getSiteContentValue } from "@/lib/repositories/siteContent";
+import { getSiteContent } from "@/lib/repositories/siteContent";
 import { init } from "@/lib/bootstrap";
 
 const NAV_LINKS = [
@@ -18,9 +18,11 @@ const LEGAL_LINKS = [
 
 export async function Footer() {
   init();
-  const description = await getSiteContentValue("footer.description");
-  const contactEmail = await getSiteContentValue("contact.email");
-  const linkedinUrl = await getSiteContentValue("social.linkedin_url");
+  // One round trip fetches every footer key (three separate reads before).
+  const content = await getSiteContent();
+  const description = content["footer.description"] ?? "";
+  const contactEmail = content["contact.email"] ?? "";
+  const linkedinUrl = content["social.linkedin_url"] ?? "";
 
   const year = new Date().getFullYear();
 
@@ -60,7 +62,7 @@ export async function Footer() {
             {contactEmail && (
               <a
                 href={`mailto:${contactEmail}`}
-                className="mt-4 block font-sans text-[0.82rem] text-ivory/45 transition-colors hover:text-gold"
+                className="mt-4 block font-sans text-[0.82rem] text-ivory/70 transition-colors hover:text-gold"
               >
                 {contactEmail}
               </a>
@@ -69,7 +71,7 @@ export async function Footer() {
 
           {/* Nav */}
           <nav className="md:col-span-4" aria-label="Footer">
-            <h2 className="font-sans text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-ivory/45">
+            <h2 className="font-sans text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-ivory/65">
               Explore
             </h2>
             <ul className="mt-5 space-y-3">
@@ -88,7 +90,7 @@ export async function Footer() {
 
           {/* Submit + legal */}
           <div className="md:col-span-3">
-            <h2 className="font-sans text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-ivory/45">
+            <h2 className="font-sans text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-ivory/65">
               Contribute
             </h2>
             <ul className="mt-5 space-y-3">
@@ -118,7 +120,7 @@ export async function Footer() {
           </div>
         </div>
 
-        <div className="mt-14 flex flex-col gap-2 border-t border-ivory/15 pt-6 text-[0.78rem] text-ivory/45 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-14 flex flex-col gap-2 border-t border-ivory/15 pt-6 text-[0.78rem] text-ivory/65 sm:flex-row sm:items-center sm:justify-between">
           <p>© {year} What&apos;s Your Story. All rights reserved.</p>
           <p className="italic">Every life has a story worth telling.</p>
         </div>

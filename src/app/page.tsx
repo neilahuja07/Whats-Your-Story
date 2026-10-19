@@ -19,7 +19,7 @@ import {
 } from "@/lib/repositories/stories";
 import { listHomeCollagePortraits } from "@/lib/repositories/collagePortraits";
 import { getFounderProfile } from "@/lib/repositories/founder";
-import { getSiteContentValue } from "@/lib/repositories/siteContent";
+import { getSiteContent } from "@/lib/repositories/siteContent";
 import { sanitizePlainText } from "@/lib/sanitize";
 
 /**
@@ -41,18 +41,22 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   init();
 
-  const headline = await getSiteContentValue("home.headline");
-  const supportingText = await getSiteContentValue("home.supporting_text");
-  const aboutHeading = await getSiteContentValue("home.about_heading");
-  const aboutBody = await getSiteContentValue("home.about_body");
+  // All reads are independent — run them together (one round trip for the
+  // site content, one parallel wave for everything else) instead of eight
+  // sequential queries.
+  const [content, featured, latest, founder, collagePortraits] =
+    await Promise.all([
+      getSiteContent(),
+      listFeaturedStories(3),
+      listPublishedStories({ pageSize: 6, sort: "newest" }),
+      getFounderProfile(),
+      listHomeCollagePortraits(),
+    ]);
 
-  const featured = await listFeaturedStories(3);
-  const latest = await listPublishedStories({ pageSize: 6, sort: "newest" });
-  const founder = await getFounderProfile();
-
-  // Homepage hero collage: only photographs the admin selected in
-  // Admin → Portraits (verified + enabled), in the admin's order.
-  const collagePortraits = await listHomeCollagePortraits();
+  const headline = content["home.headline"] ?? "";
+  const supportingText = content["home.supporting_text"] ?? "";
+  const aboutHeading = content["home.about_heading"] ?? "";
+  const aboutBody = content["home.about_body"] ?? "";
 
   // Sample content is detected from the returned stories (is_sample flag).
   const samples = [...featured, ...latest.items].some((s) => s.isSample);

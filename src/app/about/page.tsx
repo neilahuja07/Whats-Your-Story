@@ -12,7 +12,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { Reveal } from "@/components/motion/Reveal";
 import { BackToTop } from "@/components/motion/BackToTop";
 import { init } from "@/lib/bootstrap";
-import { getSiteContentValue } from "@/lib/repositories/siteContent";
+import { getSiteContent } from "@/lib/repositories/siteContent";
 
 export const metadata: Metadata = {
   title: "About Us",
@@ -54,8 +54,10 @@ const PILLARS = [
 
 export default async function AboutPage() {
   init();
-  const body = await getSiteContentValue("about.page_body");
-  const vision = await getSiteContentValue("about.vision");
+  // Single fetch for both editable blocks (was two sequential reads).
+  const content = await getSiteContent();
+  const body = content["about.page_body"] ?? "";
+  const vision = content["about.vision"] ?? "";
 
   return (
     <>

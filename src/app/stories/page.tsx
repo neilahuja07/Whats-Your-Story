@@ -58,9 +58,12 @@ export default async function StoriesPage({
   const page = Math.max(1, Number(params.page) || 1);
   const pageSize = 12;
 
-  const result = await listPublishedStories({ q, category, sort, page, pageSize });
-  const categories = await listPublishedCategories();
-  const featured = await listFeaturedStories(2);
+  // Independent reads — run together instead of one after another.
+  const [result, categories, featured] = await Promise.all([
+    listPublishedStories({ q, category, sort, page, pageSize }),
+    listPublishedCategories(),
+    listFeaturedStories(2),
+  ]);
   // Sample content is detected from the returned stories (is_sample flag).
   const samples = [...result.items, ...featured].some((s) => s.isSample);
   const hasFilters = Boolean(q || category || sortParam !== "newest");
