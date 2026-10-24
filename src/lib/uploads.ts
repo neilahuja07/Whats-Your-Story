@@ -137,3 +137,33 @@ export async function saveFounderPortraitToStorage(
 
   return { publicUrl: data.publicUrl, fileName: objectPath, format };
 }
+
+/**
+ * Validate a portrait and store it in Supabase Storage under `team/`
+ * (used for Core Team member photographs).
+ *
+ * @returns the public URL and the Storage object path
+ * @throws UploadError with a user-safe message when validation/upload fails
+ */
+export async function saveTeamPortraitToStorage(
+  file: UploadedImage,
+  personName: string,
+): Promise<{ publicUrl: string; fileName: string; format: ImageFormat }> {
+  const format = validateImageBytes(file.buffer, file.declaredName || "portrait");
+
+  const supabase = await createSupabaseServerClient();
+  const objectPath = `team/${uid()}-${descriptiveFileName(personName, format)}`;
+  const contentType =
+    format === "jpeg" ? "image/jpeg" : format === "png" ? "image/png" : "image/webp";
+
+  const upload = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(objectPath, file.buffer, { contentType, upsert: false });
+  if (upload.error) throw storageUploadError(upload.error);
+
+  const { data } = supabase.storage
+    .from(STORAGE_BUCKET)
+    .getPublicUrl(objectPath);
+
+  return { publicUrl: data.publicUrl, fileName: objectPath, format };
+}

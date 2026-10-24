@@ -192,3 +192,24 @@ export interface Paginated<T> {
   totalPages: number;
   hasMore: boolean;
 }
+
+/**
+ * A Core Team member managed via Admin → Core Team.
+ *
+ * Images live in the public `story-images` Storage bucket under `team/`.
+ * Only members with `isPublished = true` are returned to anonymous visitors.
+ */
+export interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+  /** Sanitised rich text (paragraphs, bold, italic, links). */
+  bio: string;
+  imageUrl: string;
+  imageAlt: string;
+  linkedinUrl: string;
+  displayOrder: number;
+  isPublished: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

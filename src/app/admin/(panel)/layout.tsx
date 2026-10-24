@@ -8,6 +8,7 @@ import {
   FileText,
   LogOut,
   Image as ImageIcon,
+  Users,
 } from "lucide-react";
 import { getCurrentAdmin, signOutAdmin } from "@/lib/auth";
 import { Wordmark } from "@/components/Navbar";
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/admin/submissions", label: "Interest entries", icon: Inbox },
   { href: "/admin/portraits", label: "Portraits", icon: ImageIcon },
   { href: "/admin/founder", label: "Founder", icon: UserRound },
+  { href: "/admin/team", label: "Core Team", icon: Users },
   { href: "/admin/content", label: "Site Content", icon: FileText },
 ];
 

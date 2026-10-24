@@ -7,6 +7,7 @@ const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/stories", label: "Discover Stories" },
   { href: "/about", label: "About Us" },
+  { href: "/core-team", label: "Core Team" },
   { href: "/founder", label: "The Founder" },
   { href: "/share", label: "Share Your Story" },
 ];
